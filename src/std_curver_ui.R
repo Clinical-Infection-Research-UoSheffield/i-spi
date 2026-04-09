@@ -204,7 +204,7 @@ build_bayes_plot_from_db <- function(curve_row, curve_grid, cdan_grid,
                                      standards_df = NULL, samples_df = NULL) {
   COL_STD  <- "#000000"; COL_FIT  <- "#0072B2"; COL_CI   <- "rgba(86,180,233,0.20)"
   COL_SAMP <- "#E69F00"; COL_LOQ  <- "#D55E00"; COL_RDL  <- "#604e97"
-  COL_INFL <- "#009E73"; COL_CDAN <- "#1565C0"; COL_ASYM <- "#999999"
+  COL_INFL <- "#009E73"; COL_CDAN <- "#8E44AD"; COL_ASYM <- "#999999"
 
   fam <- switch(as.character(curve_row$curve_family),
                 "4pl" = "4PL", "5pl" = "5PL", "gompertz" = "Gompertz",
@@ -4311,78 +4311,9 @@ output$bayes_standard_curve <- renderPlotly({
   p_plotly <- bayes_state$plots[[input$bayes_view_plate]]
   if (is.null(p_plotly)) return(plotly_empty())
 
-  # DB-sourced plots already include CDAN overlay — skip the add_trace logic
-  if (identical(bayes_state$data_source, "database")) return(p_plotly)
-
-  # ── Overlay CDAN precision profile on secondary right-hand Y axis ──────
-  prof_obj <- bayes_state$cdan_profiles[[input$bayes_view_plate]]
-  if (!is.null(prof_obj)) {
-    prof <- prof_obj$profile |> dplyr::filter(!is.na(smoothed_cv) & smoothed_cv < 60)
-
-    if (nrow(prof) > 0L) {
-
-      p_plotly <- p_plotly |>
-        plotly::add_trace(
-          x             = prof$log10_conc,
-          y             = prof$smoothed_cv,
-          type          = "scatter",
-          mode          = "lines",
-          name          = "Bayesian CDAN Precision Profile",
-          yaxis         = "y2",
-          line          = list(color = "#1565C0", width = 2.5),
-          hovertemplate = "Log10 Conc: %{x:.2f}<br>%CV: %{y:.1f}%<extra>CDAN</extra>"
-        ) |>
-        plotly::add_trace(
-          x          = c(min(prof$log10_conc), max(prof$log10_conc)),
-          y          = c(20, 20),
-          type       = "scatter",
-          mode       = "lines",
-          name       = "pCoV Threshold: 20%",
-          yaxis      = "y2",
-          line       = list(color = "#e68fac", dash = "dash", width = 1.5),
-          showlegend = TRUE,
-          hoverinfo  = "skip"
-        ) |>
-        plotly::add_trace(
-          x          = c(min(prof$log10_conc), max(prof$log10_conc)),
-          y          = c(15, 15),
-          type       = "scatter",
-          mode       = "lines",
-          name       = "pCoV Threshold: 15%",
-          yaxis      = "y2",
-          line       = list(color = "#4CAF50", dash = "dash", width = 1.5),
-          showlegend = TRUE,
-          hoverinfo  = "skip"
-        ) |>
-        plotly::layout(
-          yaxis2 = list(
-            overlaying = "y",
-            side       = "right",
-            title      = "Concentration Uncertainty (pCoV %)",
-            range      = c(0, 55),
-            showgrid   = FALSE,
-            zeroline   = FALSE,
-            tickfont   = list(color = "#1565C0"),
-            titlefont  = list(color = "#1565C0")
-          ),
-          yaxis3 = list(
-            overlaying = "y",
-            side       = "right",
-            anchor     = "free",
-            position   = 0.97,
-            title      = "d\u00B2x/dy\u00B2 (normalized)",
-            range      = c(-1.05, 1.05),
-            showgrid   = FALSE,
-            zeroline   = TRUE,
-            zerolinecolor = "#CCCCCC",
-            zerolinewidth = 1,
-            tickfont   = list(color = "#56B4E9", size = 10),
-            titlefont  = list(color = "#56B4E9", size = 11)
-          ),
-          margin = list(r = 140)
-        )
-    }
-  }
+  # plot_bayesian_plate() now includes the CDAN precision profile natively
+  # (purple line on yaxis2). No need to add it here for either live or DB paths.
+  # Only add yaxis3 (second derivative) if needed in the future.
 
   p_plotly
 })
