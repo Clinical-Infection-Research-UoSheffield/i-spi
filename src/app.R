@@ -4,8 +4,8 @@
 source("global.R", local = TRUE)
 
 # Set to 1 for local and do not push in prod
-#Sys.setenv(LOCAL_DEV = "0")
-#local_email_user <- "seamus.owen.stein@dartmouth.edu"
+# Sys.setenv(LOCAL_DEV = "1")
+# local_email_user <- "seamus.owen.stein@dartmouth.edu"
 #local_email_user <- "mscotzens@gmail.com"
 
 # Source authentication configuration (Step 1)
@@ -209,6 +209,64 @@ body <- dashboardBody(
         animation: dotPulse 1.5s steps(3, start) infinite;
       }
       
+     /* Force horizontal layout */
+        .radio-card-group .shiny-options-group{
+        display:flex               !important;
+        gap:15px                    !important;
+        flex-wrap:nowrap           !important;   /* NEVER wrap automatically */
+        overflow-x:auto;                       /* enable horizontal scroll on small screens */
+          overflow: visible !important;   /* stop clipping the second card */
+
+      }
+
+    /* Each option becomes a card */
+    .radio-card-group .shiny-options-group .radio{
+        flex:0 0 370px            !important;   /* 0 grow, 0 shrink, 260 px basis */
+        min-width:370px           !important;   /* browsers that ignore flex‑basis */
+        margin:0                  !important;
+      }
+
+    /* Hide default spacing */
+    .radio-card-group .shiny-options-group .radio label{
+      width:100%                !important;
+      cursor:pointer            !important;
+      display:block             !important;
+    }
+
+
+    /* Card styling */
+        .radio-card{
+      border:1px solid #ddd;
+      border-radius:10px;
+      padding:15px;
+      background:#f8f9fa;
+      transition:all .2s ease;
+      display:flex;
+      flex-direction:column;
+    }
+
+    .radio-card:hover {
+      border-color: #0d6efd;
+      background-color: #eef4ff;
+    }
+
+    .radio-title {
+      font-weight: 600;
+      font-size: 15px;
+      margin-bottom: 5px;
+    }
+
+    .radio-desc {
+      font-size: 13px;
+      color: #555;
+      max-width:100%
+    }
+
+    /* Selected state */
+    .radio-card-group input[type='radio']:checked + div {
+      border: 2px solid #0d6efd;
+      background-color: #e7f1ff;
+    }
     "))
   ),
 

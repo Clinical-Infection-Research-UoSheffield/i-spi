@@ -801,13 +801,53 @@ observeEvent(
           
           # ── Row 1: Curve Method + Antigen + Source (always visible) ──
           fluidRow(
-            column(3, radioButtons(
-              "sc_curve_method",
-              label    = "Curve Method",
-              choices  = c("Frequentist", "Bayesian"),
-              selected = "Frequentist",
-              inline   = TRUE
-            )),
+            column(
+              4,
+              div(
+                class = "radio-card-group",
+                radioButtons(
+                  "sc_curve_method",
+                  label = "Curve Method",
+                  choiceNames = list(
+                    
+                    # Frequentist option
+                    HTML("
+          <div class='radio-card'>
+            <div class='radio-title'>Frequentist regression</div>
+            <div class='radio-desc'>
+              Choose the Frequentist approach when you want a fast, transparent curve fit using nonlinear least squares (Levenberg–Marquardt)
+              with automatic model selection via AIC. It requires no prior information from other plates, gives you direct control over asymptote constraints,
+              and estimates concentrations by simple inversion of thefitted equation - making it the practical default for routine single-plate analyses 
+              where computational speed and interpertability matter most.
+            </div>
+          </div>
+        "),
+                    
+                    # Bayesian option
+                    HTML("
+          <div class='radio-card'>
+            <div class='radio-title'>Bayesian regression</div>
+            <div class='radio-desc'>
+              Choose the Bayseian approach when you need robust estimates near the upper and lower asymptotes, where frequentist methods often struggle with instability.
+              By borrowing strength from prior plate data via Hamiltonian Monte Carlo sampling, the Baysian framework naturally regularizes extreme regions of the curve and delivers concentration estimates 
+              with full posterior uncertainty - making it especially valuable in multi-plate studies where predictive accuracy and honest error quantification outweigh computational cost.
+            </div>
+          </div>
+        ")
+                  ),
+                  choiceValues = c("Frequentist", "Bayesian"),
+                  selected = "Frequentist"
+                
+                )
+              )
+            ),
+            # column(3, radioButtons(
+            #   "sc_curve_method",
+            #   label    = "Curve Method",
+            #   choices  = c("Frequentist", "Bayesian"),
+            #   selected = "Frequentist",
+            #   inline   = TRUE
+            # )),
             column(3, uiOutput("sc_antigen_selector")),
             column(3, uiOutput("sc_source_selector"))
           ),
@@ -1215,7 +1255,7 @@ observeEvent(
       req(loaded_data$standards$study_accession,
           loaded_data$standards$experiment_accession,
           nrow(loaded_data$standards) > 0)
-
+      
       updateSelectInput(session, "sc_plate_select", selected = NULL)  # Reset the plateSelection
       req(nrow(loaded_data$standards) > 0)
 
