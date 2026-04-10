@@ -372,23 +372,23 @@ fetch_bayes_from_db <- function(conn, project_id, study, experiment,
   }
 
   # 3. Fetch grids, samples, ensemble, pareto_k
-  curve_ids <- paste(curves$bayes_curves_id, collapse = ",")
+  curve_ids <- paste(curves$curve_id, collapse = ",")
 
   curve_grids <- tryCatch(DBI::dbGetQuery(conn, sprintf(
     "SELECT cg.*, bc.plateid, bc.source FROM madi_results.bayes_curve_grid cg
-     JOIN madi_results.bayes_curves bc ON cg.bayes_curves_id = bc.bayes_curves_id
-     WHERE cg.bayes_curves_id IN (%s) ORDER BY bc.plateid, cg.log10_conc", curve_ids)),
+     JOIN madi_results.bayes_curves bc ON cg.curve_id = bc.curve_id
+     WHERE cg.curve_id IN (%s) ORDER BY bc.plateid, cg.log10_conc", curve_ids)),
     error = function(e) { message("[fetch_bayes_db] curve_grid error: ", e$message); data.frame() })
 
   cdan_grids <- tryCatch(DBI::dbGetQuery(conn, sprintf(
     "SELECT cg.*, bc.plateid, bc.source FROM madi_results.bayes_cdan_grid cg
-     JOIN madi_results.bayes_curves bc ON cg.bayes_curves_id = bc.bayes_curves_id
-     WHERE cg.bayes_curves_id IN (%s) ORDER BY bc.plateid, cg.log10_conc", curve_ids)),
+     JOIN madi_results.bayes_curves bc ON cg.curve_id = bc.curve_id
+     WHERE cg.curve_id IN (%s) ORDER BY bc.plateid, cg.log10_conc", curve_ids)),
     error = function(e) { message("[fetch_bayes_db] cdan_grid error: ", e$message); data.frame() })
 
   samples_all <- tryCatch(DBI::dbGetQuery(conn, sprintf(
     "SELECT * FROM madi_results.bayes_samples
-     WHERE bayes_curves_id IN (%s)", curve_ids)),
+     WHERE curve_id IN (%s)", curve_ids)),
     error = function(e) { message("[fetch_bayes_db] samples error: ", e$message); data.frame() })
 
   ensemble <- tryCatch(DBI::dbGetQuery(conn, sprintf(

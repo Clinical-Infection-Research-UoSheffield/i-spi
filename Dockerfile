@@ -101,10 +101,8 @@ RUN R -e "install.packages('bit64')"
 RUN R -e "install.packages('shinycssloaders')"
 
 
-# Install stanassay Bayesian ensemble package from bundled tarball
-COPY stanassay_0.0.0.9000.tar.gz /tmp/stanassay_0.0.0.9000.tar.gz
-RUN R -e "install.packages('/tmp/stanassay_0.0.0.9000.tar.gz', repos = NULL, type = 'source')" \
-    && rm /tmp/stanassay_0.0.0.9000.tar.gz
+# Install stanassay from public GitHub (immunoplex/stanassay)
+RUN R -e "remotes::install_github('immunoplex/stanassay', upgrade='never')"
 
 RUN rm -rf /srv/shiny-server/*
 
