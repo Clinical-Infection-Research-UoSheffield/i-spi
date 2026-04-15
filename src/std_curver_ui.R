@@ -853,7 +853,7 @@ observeEvent(
                 
                 )
               )
-            ),
+            )
             # column(3, radioButtons(
             #   "sc_curve_method",
             #   label    = "Curve Method",
@@ -861,17 +861,30 @@ observeEvent(
             #   selected = "Frequentist",
             #   inline   = TRUE
             # )),
+            # column(4, uiOutput("sc_antigen_selector")),
+            # column(4, uiOutput("sc_source_selector"))
+          ),
+          fluidRow(
             column(3, uiOutput("sc_antigen_selector")),
-            column(3, uiOutput("sc_source_selector"))
+            column(3, uiOutput("sc_source_selector")),
+            
+            # Plate selector (Frequentist only) --
+            column(
+              3,
+              conditionalPanel(
+                condition = "input.sc_curve_method == 'Frequentist'",
+                uiOutput("sc_plate_selector")
+              )
+            )
           ),
 
           # ── Row 2: Plate selector (Frequentist only) ──
-          conditionalPanel(
-            condition = "input.sc_curve_method == 'Frequentist'",
-            fluidRow(
-              column(3, uiOutput("sc_plate_selector"))
-            )
-          ),
+          # conditionalPanel(
+          #   condition = "input.sc_curve_method == 'Frequentist'",
+          #   fluidRow(
+          #     column(3, uiOutput("sc_plate_selector"))
+          #   )
+          # ),
 
           fluidRow(
             column(3, actionButton("show_comparisions",

@@ -225,14 +225,19 @@ body <- dashboardBody(
         min-width:370px           !important;   /* browsers that ignore flex‑basis */
         margin:0                  !important;
       }
-
+      
     /* Hide default spacing */
     .radio-card-group .shiny-options-group .radio label{
       width:100%                !important;
       cursor:pointer            !important;
       display:block             !important;
+      margin-bottom: 15px       !important;
     }
 
+.radio-card-group > .form-group > label {
+  display: block;
+  margin-bottom: 14px;  /* increase this as needed */
+}
 
     /* Card styling */
         .radio-card{
@@ -243,6 +248,7 @@ body <- dashboardBody(
       transition:all .2s ease;
       display:flex;
       flex-direction:column;
+      justify-content:space-between;
     }
 
     .radio-card:hover {
