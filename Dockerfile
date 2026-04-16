@@ -2,6 +2,12 @@
 FROM rocker/tidyverse:latest
 LABEL org.opencontainers.image.source=https://github.com/hoenlab/i-spi
 
+# Switch to Azure mirror for reliable downloads on GitHub Actions runners
+RUN sed -i 's|http://archive.ubuntu.com|http://azure.archive.ubuntu.com|g' \
+    /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || \
+    sed -i 's|http://archive.ubuntu.com|http://azure.archive.ubuntu.com|g' \
+    /etc/apt/sources.list 2>/dev/null || true
+
 # Install any needed packages specified in requirements.txt
 RUN apt-get update && apt-get install -y \
     sudo \
