@@ -1122,6 +1122,7 @@ createStatusBadge <- function(method,
       "completed" = "#28a745",
       "failed"    = "#dc3545",
       "not begun" = "#dc3545",
+      "partially completed" = "#6f42c1",
       "#999999"
     )
 
@@ -1138,7 +1139,7 @@ createStatusBadge <- function(method,
     coverage <- bayes_status$coverage
     cov_label <- if (!is.null(coverage) && !is.na(coverage$n_total) && coverage$n_total > 0L) {
       pct <- round(100 * coverage$n_done / coverage$n_total)
-      col <- if (coverage$n_done == coverage$n_total) "#155724" else "#856404"
+     col <- if (coverage$n_done == coverage$n_total) "#155724" else "#ffffff"#"#856404"
       tags$small(
         style = paste0("font-weight:normal; display:block; margin-top:2px; color:", col, ";"),
         sprintf("%d / %d experiments", coverage$n_done, coverage$n_total)
@@ -1196,6 +1197,20 @@ createStatusBadge <- function(method,
           if (!is.null(ts_label)) tags$small(style = "font-weight:normal; opacity:0.85;",
                                               paste0("Last: ", ts_label)),
           via_label,
+          cov_label
+        )
+      },
+      # add partial completion status
+      "partially completed" = {
+        ts <- bayes_status$timestamp
+        ts_label <- if (!is.null(ts) && !is.na(ts)) {
+          format(as.POSIXct(ts, tz = "UTC"), "%b %d at %I:%M %p")
+        } else { NULL }
+        tagList(
+          tags$i(class = "fa fa-layer-group"), " Partially Completed",
+          if (!is.null(ts_label)) tags$br(),
+          if (!is.null(ts_label)) tags$small(style = "font-weight:normal; opacity:0.85;",
+                                             paste0("Last: ", ts_label)),
           cov_label
         )
       },

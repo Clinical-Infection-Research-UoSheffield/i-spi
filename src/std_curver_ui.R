@@ -208,13 +208,16 @@ get_bayes_calc_status <- function(conn, project_id, study, experiment = NULL,
     ))
   }
   if (job$status == "completed") {
+    
     return(list(
       status     = "completed",
       timestamp  = job$completed_at %||% job$updated_at,
       job_id     = job$job_id,
       covered_by = covered_by
     ))
+    
   }
+    
   if (job$status %in% c("failed", "error", "timed_out")) {
     return(list(
       status     = "failed",
@@ -226,6 +229,7 @@ get_bayes_calc_status <- function(conn, project_id, study, experiment = NULL,
     ))
   }
 
+  #.check_coverage_or_not_begun(covered_by)
   list(status = "not begun", covered_by = covered_by)
 }
 
@@ -2260,6 +2264,16 @@ observeEvent(
           get_study_bayes_coverage(conn, proj, stdy),
           error = function(e) NULL)
 
+         # # # when Bayes curves covers only a subset of experiments it is partially completed
+         if (identical(study_st$status, "not begun")) {
+           cov <- study_st$coverage
+           if (!is.null(cov) &&
+               isTRUE(is.finite(cov$n_total)) && cov$n_total > 0L &&
+               isTRUE(is.finite(cov$n_done))  && cov$n_done  < cov$n_total) {
+             study_st$status <- "partially completed"
+           }
+         }
+        
         # Attach per-source coverage to antigen badge (multi-source studies only)
         antg_st$sources <- tryCatch(
           get_antigen_source_coverage(conn, proj, stdy, expt, antg),
