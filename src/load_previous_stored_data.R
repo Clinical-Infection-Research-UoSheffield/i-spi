@@ -567,8 +567,8 @@ observeEvent(list(input$readxMap_experiment_accession, refresh_data_trigger()), 
       #stored_plates_data$stored_samplew <- stored_samplex
     }
 
-    # Ssamples with QC metrics
-    qc_best_samples_se <- fetch_best_sample_se_all(study_accession = input$readxMap_study_accession, experiment_accession = input$readxMap_experiment_accession,
+    # Ssamples with QC metrics - was fetch_best_sample_se_all but now add Bayes results
+    qc_best_samples_se <- fetch_best_sampl_se_with_bayes(study_accession = input$readxMap_study_accession, experiment_accession = input$readxMap_experiment_accession,
                                                    project_id = userWorkSpaceID(),
                                                    conn = conn)
     # stored_best_sample_se <- qc_best_samples_se

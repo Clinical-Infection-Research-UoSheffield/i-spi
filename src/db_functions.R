@@ -2046,6 +2046,90 @@ gate_class_pcov, best_glance_all_id, feature, norm_assay_response, raw_robust_co
   return(best_sample_se_all)
 }
 
+## Adds the Bayesian concentration and SE to the dataframe
+fetch_best_sampl_se_with_bayes <- function(study_accession, experiment_accession, project_id, conn) {
+  query <- glue("SELECT
+    -- Identifiers
+    bse.best_sample_se_all_id,
+    bse.project_id,
+    bse.study_accession,
+    bse.experiment_accession,
+    bse.plateid,
+    bse.plate,
+    bse.patientid,
+    bse.timeperiod,
+    bse.well,
+    bse.sampleid,
+    bse.stype,
+    bse.agroup,
+
+    -- Assay target
+    bse.antigen,
+    bse.feature,
+    bse.source,
+    bse.wavelength,
+    bse.antibody_n,
+
+    -- Sample QC
+    bse.pctaggbeads,
+    bse.samplingerrors,
+    bse.nominal_sample_dilution,
+    bse.assay_response_variable,
+    bse.assay_independent_variable,
+    bse.dilution,
+    bse.overall_se,
+
+    -- Assay response
+    bse.raw_assay_response,
+    bse.assay_response,
+    bse.norm_assay_response,
+
+    -- Frequentist concentration estimates
+    bse.raw_predicted_concentration     AS freq_raw_concentration,
+    bse.final_predicted_concentration   AS freq_final_concentration,
+    bse.se_concentration                AS freq_se_concentration,
+    bse.pcov                            AS freq_pcov,
+
+    -- Robust estimates
+    bse.raw_robust_concentration,
+    bse.final_robust_concentration,
+    bse.se_robust_concentration,
+    bse.pcov_robust_concentration,
+
+    -- Frequentist gate classes
+    bse.gate_class_loq,
+    bse.gate_class_lod,
+    bse.gate_class_pcov,
+    
+    -- Bayesian concentration estimates
+    bs.raw_predicted_concentration      AS bayes_raw_concentration,
+    bs.se_concentration                 AS bayes_se_concentration,
+    bs.pcov                             AS bayes_pcov,
+    bs.conc_lower                       AS bayes_conc_lower,
+    bs.conc_upper                       AS bayes_conc_upper,
+    bs.gate_class                       AS bayes_gate_class
+
+FROM madi_results.best_sample_se_all bse
+LEFT JOIN madi_results.bayes_samples bs
+    ON  bse.project_id           = bs.project_id
+    AND bse.study_accession      = bs.study_accession
+    AND bse.experiment_accession = bs.experiment_accession
+    AND bse.plateid               = bs.plateid
+    AND bse.plate                 = bs.plate
+    AND bse.patientid             = bs.patientid
+    AND bse.sampleid              = bs.sampleid
+    AND bse.well                  = bs.well
+    AND bse.antigen               = bs.antigen
+    AND bse.feature               = bs.feature
+WHERE bse.project_id           = {project_id}
+  AND bse.study_accession      = '{study_accession}'
+  AND bse.experiment_accession = '{experiment_accession}'
+
+ORDER BY best_sample_se_all_id")
+  
+  best_sample_qc_bayes <- dbGetQuery(conn, query)
+  return(best_sample_qc_bayes)
+}
 
 
 #etch_concentration_calculation_status <- function(study_accession, experiment_accession, project_id, conn) {
