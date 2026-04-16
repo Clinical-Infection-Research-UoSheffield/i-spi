@@ -1,5 +1,5 @@
 # Use an official R runtime as a parent image
-FROM rocker/tidyverse:latest
+FROM rocker/tidyverse:4.4.1
 LABEL org.opencontainers.image.source=https://github.com/hoenlab/i-spi
 
 # Install any needed packages specified in requirements.txt
