@@ -248,27 +248,54 @@ get_study_bayes_coverage <- function(conn, project_id, study) {
 }
 
 
-# For each source available for this antigen+experiment, check whether a
-# Bayesian curve exists in bayes_curves.  Returns NULL for single-source
-# combos (no ambiguity to surface).
+# For each (source, wavelength) combo available for this antigen+experiment,
+# check whether a Bayesian curve exists in bayes_curves.
+# Returns NULL when only one combo exists (nothing ambiguous to surface).
+# Works for both xMAP (differentiator = source) and ELISA (differentiator =
+# wavelength), and for studies that vary both dimensions simultaneously.
+# Display labels are computed from whichever dimension(s) actually vary —
+# no source or wavelength names are hardcoded.
 get_antigen_source_coverage <- function(conn, project_id, study, experiment, antigen) {
-  all_src <- tryCatch(DBI::dbGetQuery(conn,
-    "SELECT DISTINCT source FROM madi_results.xmap_standard
+  all_combos <- tryCatch(DBI::dbGetQuery(conn,
+    "SELECT DISTINCT source, COALESCE(wavelength, '__none__') AS wavelength
+     FROM madi_results.xmap_standard
      WHERE study_accession = $1 AND experiment_accession = $2 AND antigen = $3
-     ORDER BY source",
-    params = list(study, experiment, antigen))$source,
-    error = function(e) character(0))
+     ORDER BY source, wavelength",
+    params = list(study, experiment, antigen)),
+    error = function(e) data.frame(source = character(0), wavelength = character(0)))
 
-  if (length(all_src) <= 1L) return(NULL)  # single source — nothing to surface
+  if (nrow(all_combos) <= 1L) return(NULL)  # single combo — nothing to surface
 
-  done_src <- tryCatch(DBI::dbGetQuery(conn,
-    "SELECT DISTINCT source FROM madi_results.bayes_curves
+  done_combos <- tryCatch(DBI::dbGetQuery(conn,
+    "SELECT DISTINCT source, COALESCE(wavelength, '__none__') AS wavelength
+     FROM madi_results.bayes_curves
      WHERE project_id = $1 AND study_accession = $2
        AND experiment_accession = $3 AND antigen = $4",
-    params = list(project_id, study, experiment, antigen))$source,
-    error = function(e) character(0))
+    params = list(project_id, study, experiment, antigen)),
+    error = function(e) data.frame(source = character(0), wavelength = character(0)))
 
-  data.frame(source = all_src, covered = all_src %in% done_src, stringsAsFactors = FALSE)
+  # Determine which dimension(s) actually vary so labels are minimal but unambiguous
+  real_waves    <- all_combos$wavelength[all_combos$wavelength != "__none__"]
+  multi_source  <- length(unique(all_combos$source))    > 1L
+  multi_wave    <- length(unique(real_waves))            > 1L
+
+  make_label <- function(src, wl) {
+    if (multi_source && multi_wave)             paste0(src, " @ ", wl)
+    else if (multi_wave && wl != "__none__")    wl          # ELISA: show wavelength
+    else                                        src         # xMAP: show source
+  }
+
+  done_keys <- if (nrow(done_combos) > 0L)
+    paste(done_combos$source, done_combos$wavelength, sep = "\x00")
+  else character(0)
+  all_keys <- paste(all_combos$source, all_combos$wavelength, sep = "\x00")
+
+  data.frame(
+    label   = mapply(make_label, all_combos$source, all_combos$wavelength,
+                     USE.NAMES = FALSE),
+    covered = all_keys %in% done_keys,
+    stringsAsFactors = FALSE
+  )
 }
 
 

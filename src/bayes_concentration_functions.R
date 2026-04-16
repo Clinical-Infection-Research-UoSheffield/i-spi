@@ -1145,9 +1145,13 @@ createStatusBadge <- function(method,
       )
     } else NULL
 
-    # Per-source coverage pills shown on antigen badge (multi-source studies only)
+    # Per-combo coverage pills shown on antigen badge.
+    # Works for xMAP (source varies), ELISA (wavelength varies), or both.
+    # Labels come from get_antigen_source_coverage() which picks the right
+    # display dimension dynamically — nothing is hardcoded here.
     sources <- bayes_status$sources
-    src_pills <- if (!is.null(sources) && is.data.frame(sources) && nrow(sources) > 0L) {
+    src_pills <- if (!is.null(sources) && is.data.frame(sources) &&
+                     nrow(sources) > 0L && "label" %in% names(sources)) {
       pill_tags <- lapply(seq_len(nrow(sources)), function(i) {
         ok  <- isTRUE(sources$covered[i])
         col <- if (ok) "#28a745" else "#dc3545"
@@ -1157,7 +1161,7 @@ createStatusBadge <- function(method,
             "display:inline-block; margin:2px 2px 0; padding:1px 6px; ",
             "border-radius:8px; font-size:10px; background:", col, "; color:white;"
           ),
-          tags$i(class = paste("fa", ico)), " ", sources$source[i]
+          tags$i(class = paste("fa", ico)), " ", sources$label[i]
         )
       })
       tags$div(style = "margin-top:4px;", pill_tags)
