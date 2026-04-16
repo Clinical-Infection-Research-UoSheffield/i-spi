@@ -275,9 +275,9 @@ get_antigen_source_coverage <- function(conn, project_id, study, experiment, ant
     error = function(e) data.frame(source = character(0), wavelength = character(0)))
 
   done_set <- if (nrow(done_combos) > 0L)
-    paste(done_combos$source, done_combos$wavelength, sep = "\x00")
+    paste(done_combos$source, done_combos$wavelength, sep = "|||")
   else character(0)
-  combo_key <- function(s, w) paste(s, w, sep = "\x00")
+  combo_key <- function(s, w) paste(s, w, sep = "|||")
 
   # ── Source group (only when >1 distinct source) ─────────────────────────────
   unique_sources <- sort(unique(all_combos$source))
