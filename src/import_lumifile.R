@@ -551,26 +551,26 @@ output$readxMapData <- renderUI({
                    wellPanel(
                      h4("ELISA File Upload"),
                      p("Upload ELISA Excel files containing 'results' and 'plate_map' sheets."),
-                     
+
                      # Step 1: Upload ELISA files
                      fileInput("upload_elisa_experiment_files",
                                label = "Select ELISA data file(s)",
                                accept = c(".xlsx", ".xls"),
                                multiple = TRUE),
-                     
+
                      conditionalPanel(
                        condition = "output.hasElisaData",
                        hr(),
                        h4("Layout Template Options"),
-                       
+
                        numericInput("elisa_n_wells_on_plate",
                                     "Number of wells per plate",
                                     value = 96, min = 96, max = 384, step = 288),
-                       
+
                        textInput("elisa_description_delimiter",
                                  "Description Delimiter",
                                  value = "_"),
-                       
+
                        # Optional elements
                        tags$div(
                          class = "element-controls",
@@ -587,17 +587,17 @@ output$readxMapData <- renderUI({
                            )
                          )
                        ),
-                       
+
                        conditionalPanel(
                          condition = "output.hasElisaData",
                          uiOutput("elisa_order_input_ui"),
                          uiOutput("elisa_bcsorder_input_ui")
                        ),
-                       
+
                        hr(),
                        downloadButton("elisa_blank_layout_file", "Generate ELISA Layout Template",
                                       class = "btn-info btn-block"),
-                       
+
                        hr(),
                        fileInput("upload_elisa_layout_file",
                                  label = "Upload completed ELISA layout file",
@@ -609,7 +609,7 @@ output$readxMapData <- renderUI({
             column(9,
                    # Description warnings
                    uiOutput("elisa_description_warning_ui"),
-                   
+
                    # File summary
                    conditionalPanel(
                      condition = "output.hasElisaData",
@@ -618,10 +618,10 @@ output$readxMapData <- renderUI({
                        verbatimTextOutput("elisa_file_summary")
                      )
                    ),
-                   
+
                    # Validation status
                    uiOutput("elisa_validation_status"),
-                   
+
                    # View layout sheets (reuses batch view pattern)
                    conditionalPanel(
                      condition = "output.hasElisaLayoutSheets",
@@ -2671,65 +2671,51 @@ observeEvent(input$xPonentFile, {
 })
 
 observeEvent(input$upload_batch_button, {
-
   cat("\n╔══════════════════════════════════════════════════════════╗\n")
   cat("║         UPLOADING BATCH TO DATABASE                      ║\n")
   cat("╚══════════════════════════════════════════════════════════╝\n")
 
-
-  # VALIDATE STATE
-
+  # ── VALIDATE STATE ───────────────────────────────────────────────────────
   validation_state <- batch_validation_state()
-
   if (!validation_state$is_validated) {
     showNotification(
       "Please upload and validate a layout file before uploading to the database.",
-      type = "error",
-      duration = 5
+      type = "error", duration = 5
     )
     return(NULL)
   }
-
   if (validation_state$is_uploaded) {
     showNotification(
       "This batch has already been uploaded.",
-      type = "warning",
-      duration = 5
+      type = "warning", duration = 5
     )
     return(NULL)
   }
 
-
-  # GET PRE-COMPUTED DATA FROM LAYOUT SHEETS
-
+  # ── GET PRE-COMPUTED DATA FROM LAYOUT SHEETS ─────────────────────────────
   layout_sheets <- layout_template_sheets()
-
-  # Verify required sheets
   if (is.null(layout_sheets[["assay_response_long"]])) {
     cat("⚠ assay_response_long sheet not found, cannot proceed\n")
     showNotification(
       "Error: Assay response data not prepared. Please re-upload layout file.",
-      type = "error",
-      duration = 10
+      type = "error", duration = 10
     )
     return(NULL)
   }
 
   assay_response <- layout_sheets[["assay_response_long"]]
-  plates_map <- layout_sheets[["plates_map"]]
+  plates_map     <- layout_sheets[["plates_map"]]
   plate_id_sheet <- layout_sheets[["plate_id"]]
-  antigen_list <- layout_sheets[["antigen_list"]]
-  subject_map <- layout_sheets[["subject_groups"]]
-  timepoint_map <- layout_sheets[["timepoint"]]
+  antigen_list   <- layout_sheets[["antigen_list"]]
+  subject_map    <- layout_sheets[["subject_groups"]]
+  timepoint_map  <- layout_sheets[["timepoint"]]
 
-  # Get metadata
-  metadata_batch <- batch_metadata()
-  project_id <- userWorkSpaceID()
-  workspace_id <- userWorkSpaceID()
-  auth0_user <- currentuser()
-
-  # Extract study/experiment from plates_map
-  study_accession <- unique(plates_map$study_name)[1]
+  # ── GET METADATA ──────────────────────────────────────────────────────────
+  metadata_batch       <- batch_metadata()
+  project_id           <- userWorkSpaceID()
+  workspace_id         <- userWorkSpaceID()
+  auth0_user           <- currentuser()
+  study_accession      <- unique(plates_map$study_name)[1]
   experiment_accession <- unique(plates_map$experiment_name)[1]
 
   cat("  Study:", study_accession, "\n")
@@ -2737,114 +2723,84 @@ observeEvent(input$upload_batch_button, {
   cat("  assay_response rows:", nrow(assay_response), "\n")
   cat("  plates_map rows:", nrow(plates_map), "\n")
 
+  # ── DEBUGGING MERGE KEY ALIGNMENT ────────────────────────────────────────
   cat("\n=== DEBUGGING MERGE KEY ALIGNMENT ===\n")
   cat("  plates_map columns:", paste(names(plates_map), collapse = ", "), "\n")
   cat("  assay_response columns:", paste(names(assay_response), collapse = ", "), "\n")
-  # Check each key column
   key_cols <- c("project_id", "study_name", "experiment_name", "plateid", "well")
   cat("\n  Checking key columns:\n")
   for (col in key_cols) {
     pm_has <- col %in% names(plates_map)
     ar_has <- col %in% names(assay_response)
-    cat("    ", col, ": plates_map=", pm_has, ", assay_response=", ar_has, "\n", sep="")
+    cat("    ", col, ": plates_map=", pm_has, ", assay_response=", ar_has, "\n", sep = "")
     if (pm_has && ar_has) {
       pm_vals <- unique(plates_map[[col]])
       ar_vals <- unique(assay_response[[col]])
-      # For small sets, show values
       if (length(pm_vals) <= 5 && length(ar_vals) <= 5) {
-        cat("      plates_map values: ", paste(pm_vals, collapse=", "), "\n", sep="")
-        cat("      assay_response values: ", paste(ar_vals, collapse=", "), "\n", sep="")
+        cat("      plates_map values: ",    paste(pm_vals, collapse = ", "), "\n", sep = "")
+        cat("      assay_response values: ", paste(ar_vals, collapse = ", "), "\n", sep = "")
       } else {
-        cat("      plates_map unique count: ", length(pm_vals), "\n", sep="")
-        cat("      assay_response unique count: ", length(ar_vals), "\n", sep="")
+        cat("      plates_map unique count: ",    length(pm_vals), "\n", sep = "")
+        cat("      assay_response unique count: ", length(ar_vals), "\n", sep = "")
       }
       matches <- intersect(pm_vals, ar_vals)
-      cat("      Matching values: ", length(matches), "/", length(pm_vals), "\n", sep="")
+      cat("      Matching values: ", length(matches), "/", length(pm_vals), "\n", sep = "")
     }
   }
   cat("===========================================\n\n")
 
-  # CHECK FOR EXISTING PLATES
+  # ── CHECK FOR EXISTING PLATES ─────────────────────────────────────────────
   plate_ids <- unique(plate_id_sheet$plate_id)
-
   existing_plates <- check_existing_plates(
-    conn = conn,
-    project_id = project_id,
-    study_accession = study_accession,
+    conn             = conn,
+    project_id       = project_id,
+    study_accession  = study_accession,
     experiment_accession = experiment_accession,
-    plateids = plate_ids
+    plateids         = plate_ids
   )
-
   if (nrow(existing_plates) > 0) {
     cat("⚠ Plates already exist:\n")
     print(existing_plates)
     showNotification(
       "These plates already exist for this study and experiment.",
-      type = "warning",
-      duration = 5
+      type = "warning", duration = 5
     )
     return(NULL)
   }
 
-  # PREPARE COLUMN MAPPING
-  col_mapping <- create_column_mapping()
-  # Natural key for joining plates_map to assay_response
-  natural_key <- c("study_name", "experiment_name", "plateid", "well")
+  # ── COLUMN MAPPING ────────────────────────────────────────────────────────
+  col_mapping  <- create_column_mapping()
+  natural_key  <- c("study_name", "experiment_name", "plateid", "well")
 
-  # Helper: fill missing sampleid values that would cause NOT NULL violations.
-  # biosample_id_barcode is derived from Type (e.g. "X145" → "145") but xPONENT
-  # Types often lack numeric suffixes ("X", "S1", "B"), so the barcode may be
-
-  # empty after the Excel round-trip.
+  # Helper: fill missing sampleid values that would cause NOT NULL violations
   fill_missing_sampleid <- function(df, specimen_type = c("X", "S", "C")) {
     specimen_type <- match.arg(specimen_type)
     if (!"sampleid" %in% names(df)) df$sampleid <- NA_character_
-
     needs_fill <- is.na(df$sampleid) | trimws(df$sampleid) == ""
-
     if (!any(needs_fill)) return(df)
-
     if (specimen_type == "X") {
-      # Samples: use patientid (subject_id) — preserves replicate semantics
-      if ("patientid" %in% names(df)) {
+      if ("patientid" %in% names(df))
         df$sampleid[needs_fill] <- df$patientid[needs_fill]
-      }
     } else {
-      # Standards / Controls: use dilution factor as identifier
-      if ("dilution" %in% names(df)) {
+      if ("dilution" %in% names(df))
         df$sampleid[needs_fill] <- as.character(df$dilution[needs_fill])
-      }
     }
-
-    # Final fallback: use well position (always present, always non-null)
     still_empty <- is.na(df$sampleid) | trimws(df$sampleid) == ""
-    if (any(still_empty) && "well" %in% names(df)) {
+    if (any(still_empty) && "well" %in% names(df))
       df$sampleid[still_empty] <- df$well[still_empty]
-    }
-
     return(df)
   }
 
-
-  # PREPARE HEADER DATA
-
+  # ── PREPARE HEADER ────────────────────────────────────────────────────────
   cat("\n  Preparing header data...\n")
-
   header_data <- plate_id_sheet
-  header_data$workspace_id <- workspace_id
-  header_data$auth0_user <- auth0_user
-  header_data$assay_response_variable <- "mfi"
-  header_data$assay_independent_variable <- "concentration"
-
-  # Apply column mapping
+  header_data$workspace_id                <- workspace_id
+  header_data$auth0_user                  <- auth0_user
+  header_data$assay_response_variable     <- "mfi"
+  header_data$assay_independent_variable  <- "concentration"
   header_data <- apply_column_mapping(header_data, col_mapping)
-
-  # Rename specific columns for database
-  if ("plate_filename" %in% names(header_data)) {
+  if ("plate_filename" %in% names(header_data))
     names(header_data)[names(header_data) == "plate_filename"] <- "file_name"
-  }
-
-  # Select required columns
   header_cols <- c(
     "study_accession", "experiment_accession", "plate_id", "file_name",
     "acquisition_date", "reader_serial_number", "rp1_pmt_volts", "rp1_target",
@@ -2852,28 +2808,22 @@ observeEvent(input$upload_batch_button, {
     "n_wells", "assay_response_variable", "assay_independent_variable",
     "nominal_sample_dilution", "project_id"
   )
-  available_header_cols <- intersect(header_cols, names(header_data))
-  header_data <- header_data[, available_header_cols, drop = FALSE]
-
-  # Deduplicate
-  nk_cols <- intersect(c("project_id", "study_accession", "experiment_accession", "plate_id", "nominal_sample_dilution"), names(header_data))
+  header_data <- header_data[, intersect(header_cols, names(header_data)), drop = FALSE]
+  nk_cols     <- intersect(
+    c("project_id", "study_accession", "experiment_accession",
+      "plate_id", "nominal_sample_dilution"),
+    names(header_data)
+  )
   header_data <- header_data[!duplicated(header_data[, nk_cols, drop = FALSE]), ]
-
   cat("    → Header rows:", nrow(header_data), "\n")
 
-
-  # PREPARE SAMPLE DATA (X)
+  # ── PREPARE SAMPLES (X) ───────────────────────────────────────────────────
   cat("  Preparing sample data...\n")
-
   sample_map <- plates_map[which(substr(plates_map$specimen_type, 1, 1) == "X"), ]
-
   if (nrow(sample_map) > 0 && !is.null(subject_map)) {
-    # Join subject_groups for groupa/groupb
     sample_map <- merge(
-      sample_map,
-      subject_map,
-      by = c("study_name", "subject_id"),
-      all.x = TRUE
+      sample_map, subject_map,
+      by = c("study_name", "subject_id"), all.x = TRUE
     )
     sample_map$agroup <- ifelse(
       is.na(sample_map$groupb),
@@ -2881,273 +2831,206 @@ observeEvent(input$upload_batch_button, {
       paste(sample_map$groupa, sample_map$groupb, sep = "_")
     )
   }
-
   if (nrow(sample_map) > 0) {
-    # Join with assay_response - FIXED: removed antigen_label_on_plate
-    assay_cols <- intersect(
+    assay_cols        <- intersect(
       c(natural_key, "antigen", "assay_response", "assay_bead_count"),
       names(assay_response)
     )
-
     samples_to_upload <- merge(
       sample_map,
       assay_response[, assay_cols, drop = FALSE],
-      by = natural_key,
-      all.x = TRUE
+      by = natural_key, all.x = TRUE
     )
-
-    if (!"plate_id" %in% names(samples_to_upload) && "plate_id" %in% names(plate_id_sheet)) {
-      cat("    → Joining plate_id from plate_id_sheet...\n")
-      plate_id_lookup <- unique(plate_id_sheet[, c("plateid", "plate_id"), drop = FALSE])
-      samples_to_upload <- merge(
-        samples_to_upload,
-        plate_id_lookup,
-        by = "plateid",
-        all.x = TRUE
-      )
+    if (!"plate_id" %in% names(samples_to_upload) &&
+        "plate_id" %in% names(plate_id_sheet)) {
+      pid_lookup        <- unique(plate_id_sheet[, c("plateid", "plate_id"), drop = FALSE])
+      samples_to_upload <- merge(samples_to_upload, pid_lookup,
+                                 by = "plateid", all.x = TRUE)
     }
-
-    # Apply column mapping
     samples_to_upload <- apply_column_mapping(samples_to_upload, col_mapping)
-
-    # Fill missing sampleid (xPONENT Types lack numeric suffixes)
     samples_to_upload <- fill_missing_sampleid(samples_to_upload, "X")
-
-    # Select required columns
-    sample_cols <- c(
+    sample_cols       <- c(
       "project_id", "study_accession", "experiment_accession", "timeperiod",
       "patientid", "well", "stype", "sampleid", "agroup", "dilution",
       "pctaggbeads", "samplingerrors", "antigen", "antibody_mfi", "antibody_n",
-      "feature", "plate", "nominal_sample_dilution", "plateid","plate_id"
+      "feature", "plate", "nominal_sample_dilution", "plateid", "plate_id"
     )
-    available_sample_cols <- intersect(sample_cols, names(samples_to_upload))
-    samples_to_upload <- samples_to_upload[, available_sample_cols, drop = FALSE]
-
+    samples_to_upload <- samples_to_upload[,
+                                           intersect(sample_cols, names(samples_to_upload)), drop = FALSE]
     cat("    → Sample rows:", nrow(samples_to_upload), "\n")
   } else {
     samples_to_upload <- NULL
     cat("    → No samples found\n")
   }
 
-  # PREPARE STANDARD DATA (S)
+  # ── PREPARE STANDARDS (S) ─────────────────────────────────────────────────
   cat("  Preparing standard data...\n")
   standard_map <- plates_map[which(substr(plates_map$specimen_type, 1, 1) == "S"), ]
-
   if (nrow(standard_map) > 0) {
-    # Join with assay_response
-    assay_cols <- intersect(
+    assay_cols          <- intersect(
       c(natural_key, "antigen", "assay_response", "assay_bead_count"),
       names(assay_response)
     )
-
     standards_to_upload <- merge(
       standard_map,
       assay_response[, assay_cols, drop = FALSE],
-      by = natural_key,
-      all.x = TRUE
+      by = natural_key, all.x = TRUE
     )
-
-    # Ensure plate_id is present
-    if (!"plate_id" %in% names(standards_to_upload) && "plate_id" %in% names(plate_id_sheet)) {
-      cat("    → Joining plate_id from plate_id_sheet...\n")
-      plate_id_lookup <- unique(plate_id_sheet[, c("plateid", "plate_id"), drop = FALSE])
-      standards_to_upload <- merge(
-        standards_to_upload,
-        plate_id_lookup,
-        by = "plateid",
-        all.x = TRUE
-      )
+    if (!"plate_id" %in% names(standards_to_upload) &&
+        "plate_id" %in% names(plate_id_sheet)) {
+      pid_lookup          <- unique(plate_id_sheet[, c("plateid", "plate_id"), drop = FALSE])
+      standards_to_upload <- merge(standards_to_upload, pid_lookup,
+                                   by = "plateid", all.x = TRUE)
     }
-
-    # Apply column mapping
     standards_to_upload <- apply_column_mapping(standards_to_upload, col_mapping)
-
-    # Fill missing sampleid (xPONENT Types lack numeric suffixes)
     standards_to_upload <- fill_missing_sampleid(standards_to_upload, "S")
-
-    # Select required columns
-    standard_cols <- c(
+    standard_cols       <- c(
       "project_id", "study_accession", "experiment_accession", "plate_id", "well",
       "stype", "sampleid", "source", "dilution", "pctaggbeads", "samplingerrors",
       "antigen", "antibody_mfi", "antibody_n", "feature",
       "plateid", "nominal_sample_dilution", "plate"
     )
-    available_standard_cols <- intersect(standard_cols, names(standards_to_upload))
-    standards_to_upload <- standards_to_upload[, available_standard_cols, drop = FALSE]
-
+    standards_to_upload <- standards_to_upload[,
+                                               intersect(standard_cols, names(standards_to_upload)), drop = FALSE]
     cat("    → Standard rows:", nrow(standards_to_upload), "\n")
   } else {
     standards_to_upload <- NULL
     cat("    → No standards found\n")
   }
 
-  # PREPARE BLANK DATA (B)
+  # ── PREPARE BLANKS (B) ────────────────────────────────────────────────────
   cat("  Preparing blank data...\n")
   blank_map <- plates_map[which(substr(plates_map$specimen_type, 1, 1) == "B"), ]
-
   if (nrow(blank_map) > 0) {
-    # Join with assay_response - FIXED: removed antigen_label_on_plate
-    assay_cols <- intersect(
+    assay_cols       <- intersect(
       c(natural_key, "antigen", "assay_response", "assay_bead_count"),
       names(assay_response)
     )
-
     blanks_to_upload <- merge(
       blank_map,
       assay_response[, assay_cols, drop = FALSE],
-      by = natural_key,
-      all.x = TRUE
+      by = natural_key, all.x = TRUE
     )
-
-    # ADDED: Ensure plate_id is present
-    if (!"plate_id" %in% names(blanks_to_upload) && "plate_id" %in% names(plate_id_sheet)) {
-      cat("    → Joining plate_id from plate_id_sheet...\n")
-      plate_id_lookup <- unique(plate_id_sheet[, c("plateid", "plate_id"), drop = FALSE])
-      blanks_to_upload <- merge(
-        blanks_to_upload,
-        plate_id_lookup,
-        by = "plateid",
-        all.x = TRUE
-      )
+    if (!"plate_id" %in% names(blanks_to_upload) &&
+        "plate_id" %in% names(plate_id_sheet)) {
+      pid_lookup       <- unique(plate_id_sheet[, c("plateid", "plate_id"), drop = FALSE])
+      blanks_to_upload <- merge(blanks_to_upload, pid_lookup,
+                                by = "plateid", all.x = TRUE)
     }
-
     blanks_to_upload <- apply_column_mapping(blanks_to_upload, col_mapping)
-
-    blank_cols <- c(
+    blank_cols       <- c(
       "study_accession", "experiment_accession", "plate_id", "well",
       "stype", "dilution", "pctaggbeads", "samplingerrors",
       "antigen", "antibody_mfi", "antibody_n", "feature", "project_id",
       "plateid", "nominal_sample_dilution", "plate"
     )
-    available_blank_cols <- intersect(blank_cols, names(blanks_to_upload))
-    blanks_to_upload <- blanks_to_upload[, available_blank_cols, drop = FALSE]
-
+    blanks_to_upload <- blanks_to_upload[,
+                                         intersect(blank_cols, names(blanks_to_upload)), drop = FALSE]
     cat("    → Blank rows:", nrow(blanks_to_upload), "\n")
   } else {
     blanks_to_upload <- NULL
     cat("    → No blanks found\n")
   }
 
-
-  # PREPARE CONTROL DATA (C)
+  # ── PREPARE CONTROLS (C) ──────────────────────────────────────────────────
   cat("  Preparing control data...\n")
   control_map <- plates_map[which(substr(plates_map$specimen_type, 1, 1) == "C"), ]
-
   if (nrow(control_map) > 0) {
-    # Join with assay_response - FIXED: removed antigen_label_on_plate
-    assay_cols <- intersect(
+    assay_cols         <- intersect(
       c(natural_key, "antigen", "assay_response", "assay_bead_count"),
       names(assay_response)
     )
-
     controls_to_upload <- merge(
       control_map,
       assay_response[, assay_cols, drop = FALSE],
-      by = natural_key,
-      all.x = TRUE
+      by = natural_key, all.x = TRUE
     )
-
-    if (!"plate_id" %in% names(controls_to_upload) && "plate_id" %in% names(plate_id_sheet)) {
-      cat("    → Joining plate_id from plate_id_sheet...\n")
-      plate_id_lookup <- unique(plate_id_sheet[, c("plateid", "plate_id"), drop = FALSE])
-      controls_to_upload <- merge(
-        controls_to_upload,
-        plate_id_lookup,
-        by = "plateid",
-        all.x = TRUE
-      )
+    if (!"plate_id" %in% names(controls_to_upload) &&
+        "plate_id" %in% names(plate_id_sheet)) {
+      pid_lookup         <- unique(plate_id_sheet[, c("plateid", "plate_id"), drop = FALSE])
+      controls_to_upload <- merge(controls_to_upload, pid_lookup,
+                                  by = "plateid", all.x = TRUE)
     }
-
     controls_to_upload <- apply_column_mapping(controls_to_upload, col_mapping)
-
-    # Fill missing sampleid (xPONENT Types lack numeric suffixes)
     controls_to_upload <- fill_missing_sampleid(controls_to_upload, "C")
-
-    control_cols <- c(
+    control_cols       <- c(
       "study_accession", "experiment_accession", "plate_id", "well",
       "stype", "sampleid", "source", "dilution", "pctaggbeads", "samplingerrors",
       "antigen", "antibody_mfi", "antibody_n", "feature", "project_id",
       "plateid", "nominal_sample_dilution", "plate"
     )
-    available_control_cols <- intersect(control_cols, names(controls_to_upload))
-    controls_to_upload <- controls_to_upload[, available_control_cols, drop = FALSE]
-
+    controls_to_upload <- controls_to_upload[,
+                                             intersect(control_cols, names(controls_to_upload)), drop = FALSE]
     cat("    → Control rows:", nrow(controls_to_upload), "\n")
   } else {
     controls_to_upload <- NULL
     cat("    → No controls found\n")
   }
 
-
-  # PREPARE ANTIGEN FAMILY DATA
-
+  # ── PREPARE ANTIGEN FAMILY ────────────────────────────────────────────────
   cat("  Preparing antigen family data...\n")
-
   antigen_cols_needed <- c(
-    "project_id", "study_name", "experiment_name", "antigen_abbreviation", "antigen_family",
-    "standard_curve_max_concentration", "antigen_name", "virus_bacterial_strain",
-    "antigen_source", "catalog_number", "l_asy_min_constraint",
-    "l_asy_max_constraint", "l_asy_constraint_method"
+    "project_id", "study_name", "experiment_name", "antigen_abbreviation",
+    "antigen_family", "standard_curve_max_concentration", "antigen_name",
+    "virus_bacterial_strain", "antigen_source", "catalog_number",
+    "l_asy_min_constraint", "l_asy_max_constraint", "l_asy_constraint_method"
   )
-  available_antigen_cols <- intersect(antigen_cols_needed, names(antigen_list))
-  antigens_to_upload <- antigen_list[, available_antigen_cols, drop = FALSE]
-
-  if ("standard_curve_max_concentration" %in% names(antigens_to_upload)) {
-    names(antigens_to_upload)[names(antigens_to_upload) == "standard_curve_max_concentration"] <- "standard_curve_concentration"
-  }
-
+  antigens_to_upload <- antigen_list[,
+                                     intersect(antigen_cols_needed, names(antigen_list)), drop = FALSE]
+  if ("standard_curve_max_concentration" %in% names(antigens_to_upload))
+    names(antigens_to_upload)[
+      names(antigens_to_upload) == "standard_curve_max_concentration"
+    ] <- "standard_curve_concentration"
   antigens_to_upload <- apply_column_mapping(antigens_to_upload, col_mapping)
   cat("    → Antigen rows:", nrow(antigens_to_upload), "\n")
 
-
-  # PREPARE PLANNED VISITS DATA
-
+  # ── PREPARE PLANNED VISITS ────────────────────────────────────────────────
   cat("  Preparing planned visits data...\n")
-
   visits_to_upload <- timepoint_map
-
   if (!is.null(visits_to_upload)) {
-    names(visits_to_upload)[names(visits_to_upload) == "timepoint_tissue_abbreviation"] <- "timepoint_name"
-    names(visits_to_upload)[names(visits_to_upload) == "tissue_type"] <- "type"
+    names(visits_to_upload)[
+      names(visits_to_upload) == "timepoint_tissue_abbreviation"] <- "timepoint_name"
+    names(visits_to_upload)[names(visits_to_upload) == "tissue_type"]    <- "type"
     names(visits_to_upload)[names(visits_to_upload) == "tissue_subtype"] <- "subtype"
-    names(visits_to_upload)[names(visits_to_upload) == "description"] <- "end_rule"
-    names(visits_to_upload)[names(visits_to_upload) == "min_time_since_day_0"] <- "min_start_day"
-    names(visits_to_upload)[names(visits_to_upload) == "max_time_since_day_0"] <- "max_start_day"
-
+    names(visits_to_upload)[names(visits_to_upload) == "description"]    <- "end_rule"
+    names(visits_to_upload)[
+      names(visits_to_upload) == "min_time_since_day_0"] <- "min_start_day"
+    names(visits_to_upload)[
+      names(visits_to_upload) == "max_time_since_day_0"] <- "max_start_day"
     visits_to_upload <- apply_column_mapping(visits_to_upload, col_mapping)
     cat("    → Visit rows:", nrow(visits_to_upload), "\n")
   } else {
     cat("    → No visits found\n")
   }
 
-
-  # UPLOAD TO DATABASE
-
+  # ════════════════════════════════════════════════════════════════════════════
+  # INSERT INTO DATABASE
+  # ════════════════════════════════════════════════════════════════════════════
   cat("\n╔══════════════════════════════════════════════════════════╗\n")
   cat("║  INSERTING DATA INTO DATABASE                            ║\n")
   cat("╚══════════════════════════════════════════════════════════╝\n")
 
   result <- list(
-    success = FALSE,
+    success        = FALSE,
     already_exists = FALSE,
-    counts = list(header = 0, samples = 0, standards = 0, blanks = 0, controls = 0, antigens = 0, visits = 0),
-    errors = list(),
-    message = ""
+    counts         = list(header = 0, samples = 0, standards = 0,
+                          blanks = 0, controls = 0, antigens = 0,
+                          visits = 0, curves = 0),   # curves added
+    errors         = list(),
+    message        = ""
   )
 
-  # Insert header
+  # ── Header ────────────────────────────────────────────────────────────────
   if (!is.null(header_data) && nrow(header_data) > 0) {
     cat("  Inserting header...\n")
-    # Standardize acquisition_date to ISO format for PostgreSQL
-    if ("acquisition_date" %in% names(header_data)) {
-      header_data$acquisition_date <- standardize_date_for_postgres(header_data$acquisition_date)
-    }
+    if ("acquisition_date" %in% names(header_data))
+      header_data$acquisition_date <- standardize_date_for_postgres(
+        header_data$acquisition_date)
     header_result <- insert_to_table(
       conn, "madi_results", "xmap_header", header_data, "header",
       required_cols = c("project_id", "study_accession", "plate_id")
     )
     result$counts$header <- header_result$rows_inserted
-
     if (!header_result$success) {
       result$errors$header <- header_result$message
       result$message <- "Failed to upload header"
@@ -3157,15 +3040,15 @@ observeEvent(input$upload_batch_button, {
     }
   }
 
-  # Insert samples
-  if (!is.null(samples_to_upload) && nrow(samples_to_upload) > 0 && length(result$errors) == 0) {
+  # ── Samples ───────────────────────────────────────────────────────────────
+  if (!is.null(samples_to_upload) && nrow(samples_to_upload) > 0 &&
+      length(result$errors) == 0) {
     cat("  Inserting samples...\n")
     sample_result <- insert_to_table(
       conn, "madi_results", "xmap_sample", samples_to_upload, "sample",
       required_cols = c("project_id", "study_accession", "plate_id", "well", "antigen")
     )
     result$counts$samples <- sample_result$rows_inserted
-
     if (!sample_result$success) {
       result$errors$samples <- sample_result$message
       cat("    ✗ Sample insert failed:", sample_result$message, "\n")
@@ -3174,7 +3057,7 @@ observeEvent(input$upload_batch_button, {
     }
   }
 
-  # Insert standards
+  # ── Standards ─────────────────────────────────────────────────────────────
   if (!is.null(standards_to_upload) && nrow(standards_to_upload) > 0) {
     cat("  Inserting standards...\n")
     standard_result <- insert_to_table(
@@ -3182,16 +3065,51 @@ observeEvent(input$upload_batch_button, {
       required_cols = c("project_id", "study_accession", "plate_id", "well", "antigen")
     )
     result$counts$standards <- standard_result$rows_inserted
-
     if (!standard_result$success) {
       result$errors$standards <- standard_result$message
       cat("    ✗ Standard insert failed:", standard_result$message, "\n")
     } else {
       cat("    ✓ Standards inserted:", standard_result$rows_inserted, "rows\n")
     }
+
+    # ── Register new curve combinations in curve_lookup ──────────────────
+    # Placed immediately after standards are committed.
+    # standards_to_upload is already fully column-mapped at this point:
+    #   study_accession, experiment_accession, plateid, plate,
+    #   nominal_sample_dilution, source, antigen, feature are all present.
+    # Non-fatal: a curve_lookup failure never blocks or rolls back the upload.
+    if (standard_result$success) {
+      cat("  Registering curves in curve_lookup...\n")
+      tryCatch({
+        cl_result <- register_curve_lookup(
+          conn         = conn,
+          standards_df = standards_to_upload,
+          project_id   = workspace_id
+        )
+        result$counts$curves <- cl_result$rows_inserted
+        if (cl_result$success) {
+          cat("    ✓ curve_lookup:", cl_result$message, "\n")
+        } else {
+          cat("    ⚠ curve_lookup warning:", cl_result$message, "\n")
+          showNotification(
+            paste("curve_lookup warning:", cl_result$message),
+            type = "warning", duration = 8
+          )
+        }
+      }, error = function(e_cl) {
+        # Fully isolated — curve_lookup error must never surface as an
+        # upload failure because the standard rows are already committed.
+        cat("    ⚠ curve_lookup non-fatal error:", conditionMessage(e_cl), "\n")
+        showNotification(
+          paste("curve_lookup (non-fatal):", conditionMessage(e_cl)),
+          type = "warning", duration = 8
+        )
+      })
+    }
+    # ── End curve_lookup registration ─────────────────────────────────────
   }
 
-  # Insert blanks
+  # ── Blanks ────────────────────────────────────────────────────────────────
   if (!is.null(blanks_to_upload) && nrow(blanks_to_upload) > 0) {
     cat("  Inserting blanks...\n")
     blank_result <- insert_to_table(
@@ -3199,7 +3117,6 @@ observeEvent(input$upload_batch_button, {
       required_cols = c("project_id", "study_accession", "plate_id", "well", "antigen")
     )
     result$counts$blanks <- blank_result$rows_inserted
-
     if (!blank_result$success) {
       result$errors$blanks <- blank_result$message
       cat("    ✗ Blank insert failed:", blank_result$message, "\n")
@@ -3208,7 +3125,7 @@ observeEvent(input$upload_batch_button, {
     }
   }
 
-  # Insert controls
+  # ── Controls ──────────────────────────────────────────────────────────────
   if (!is.null(controls_to_upload) && nrow(controls_to_upload) > 0) {
     cat("  Inserting controls...\n")
     control_result <- insert_to_table(
@@ -3216,7 +3133,6 @@ observeEvent(input$upload_batch_button, {
       required_cols = c("project_id", "study_accession", "plate_id", "well", "antigen")
     )
     result$counts$controls <- control_result$rows_inserted
-
     if (!control_result$success) {
       result$errors$controls <- control_result$message
       cat("    ✗ Control insert failed:", control_result$message, "\n")
@@ -3225,96 +3141,753 @@ observeEvent(input$upload_batch_button, {
     }
   }
 
-  # Insert antigens (with deduplication)
+  # ── Antigens ──────────────────────────────────────────────────────────────
   if (!is.null(antigens_to_upload) && nrow(antigens_to_upload) > 0) {
     cat("  Inserting antigens...\n")
     existing_antigens <- get_existing_antigens(conn, study_accession, experiment_accession)
-
     result$counts$antigens <- insert_new_rows(
       conn, "madi_results", "xmap_antigen_family",
-      new_data = antigens_to_upload,
+      new_data      = antigens_to_upload,
       existing_data = existing_antigens,
-      join_keys = c("study_accession", "experiment_accession", "antigen"),
-      label = "antigen family"
+      join_keys     = c("study_accession", "experiment_accession", "antigen"),
+      label         = "antigen family"
     )
     cat("    ✓ Antigens inserted:", result$counts$antigens, "rows\n")
   }
 
-  # Insert visits (with deduplication)
+  # ── Planned visits ────────────────────────────────────────────────────────
   if (!is.null(visits_to_upload) && nrow(visits_to_upload) > 0) {
     cat("  Inserting visits...\n")
     existing_visits <- get_existing_visits(conn, study_accession)
-
     result$counts$visits <- insert_new_rows(
       conn, "madi_results", "xmap_planned_visit",
-      new_data = visits_to_upload,
+      new_data      = visits_to_upload,
       existing_data = existing_visits,
-      join_keys = c("study_accession", "timepoint_name"),
-      label = "planned visit"
+      join_keys     = c("study_accession", "timepoint_name"),
+      label         = "planned visit"
     )
     cat("    ✓ Visits inserted:", result$counts$visits, "rows\n")
   }
 
-
-  # FINALIZE RESULT
-
-  result$success <- length(result$errors) == 0
+  # ── FINALISE RESULT ───────────────────────────────────────────────────────
+  # curve_lookup is explicitly excluded from the fatal error check —
+  # data is already committed by the time curve_lookup runs.
+  fatal_errors   <- result$errors[!names(result$errors) %in% "curve_lookup"]
+  result$success <- length(fatal_errors) == 0
   result$message <- if (result$success) {
     "Batch uploaded successfully"
   } else {
-    paste("Upload completed with errors:", paste(names(result$errors), collapse = ", "))
+    paste("Upload completed with errors:", paste(names(fatal_errors), collapse = ", "))
   }
 
-  # Update validation state
+  # ── Update validation state ───────────────────────────────────────────────
   if (result$success) {
     current_state <- batch_validation_state()
     batch_validation_state(list(
-      is_validated = current_state$is_validated,
-      is_uploaded = TRUE,
+      is_validated    = current_state$is_validated,
+      is_uploaded     = TRUE,
       validation_time = current_state$validation_time,
-      upload_time = Sys.time(),
+      upload_time     = Sys.time(),
       metadata_result = current_state$metadata_result,
       bead_array_result = current_state$bead_array_result
     ))
   }
 
-
-  # SHOW NOTIFICATIONS
-
+  # ── Notifications ─────────────────────────────────────────────────────────
   if (result$success) {
-    counts <- result$counts
+    counts         <- result$counts
     detail_message <- sprintf(
-      "Uploaded: %d headers, %d samples, %d standards, %d blanks, %d controls, %d antigens, %d visits",
+      "Uploaded: %d headers, %d samples, %d standards, %d blanks, %d controls, %d antigens, %d visits, %d curves registered",
       counts$header, counts$samples, counts$standards,
-      counts$blanks, counts$controls, counts$antigens, counts$visits
+      counts$blanks, counts$controls, counts$antigens,
+      counts$visits, counts$curves
     )
-
     showNotification("Batch Uploaded Successfully", type = "message", duration = 5)
-    showNotification(detail_message, type = "message", duration = 10)
-
+    showNotification(detail_message,               type = "message", duration = 10)
     cat("\n✓ UPLOAD COMPLETE\n")
     cat(detail_message, "\n")
   } else {
     showNotification(
       paste("Upload failed:", result$message),
-      type = "error",
-      duration = NULL
+      type = "error", duration = NULL
     )
-
-    for (error_name in names(result$errors)) {
+    for (error_name in names(fatal_errors)) {
       showNotification(
         paste(error_name, "error:", result$errors[[error_name]]),
-        type = "error",
-        duration = NULL
+        type = "error", duration = NULL
       )
     }
-
     cat("\n✗ UPLOAD FAILED\n")
-    cat("Errors:", paste(names(result$errors), collapse = ", "), "\n")
+    cat("Errors:", paste(names(fatal_errors), collapse = ", "), "\n")
   }
 
   cat("╚══════════════════════════════════════════════════════════╝\n\n")
 })
+
+# observeEvent(input$upload_batch_button, {
+#
+#   cat("\n╔══════════════════════════════════════════════════════════╗\n")
+#   cat("║         UPLOADING BATCH TO DATABASE                      ║\n")
+#   cat("╚══════════════════════════════════════════════════════════╝\n")
+#
+#
+#   # VALIDATE STATE
+#
+#   validation_state <- batch_validation_state()
+#
+#   if (!validation_state$is_validated) {
+#     showNotification(
+#       "Please upload and validate a layout file before uploading to the database.",
+#       type = "error",
+#       duration = 5
+#     )
+#     return(NULL)
+#   }
+#
+#   if (validation_state$is_uploaded) {
+#     showNotification(
+#       "This batch has already been uploaded.",
+#       type = "warning",
+#       duration = 5
+#     )
+#     return(NULL)
+#   }
+#
+#
+#   # GET PRE-COMPUTED DATA FROM LAYOUT SHEETS
+#
+#   layout_sheets <- layout_template_sheets()
+#
+#   # Verify required sheets
+#   if (is.null(layout_sheets[["assay_response_long"]])) {
+#     cat("⚠ assay_response_long sheet not found, cannot proceed\n")
+#     showNotification(
+#       "Error: Assay response data not prepared. Please re-upload layout file.",
+#       type = "error",
+#       duration = 10
+#     )
+#     return(NULL)
+#   }
+#
+#   assay_response <- layout_sheets[["assay_response_long"]]
+#   plates_map <- layout_sheets[["plates_map"]]
+#   plate_id_sheet <- layout_sheets[["plate_id"]]
+#   antigen_list <- layout_sheets[["antigen_list"]]
+#   subject_map <- layout_sheets[["subject_groups"]]
+#   timepoint_map <- layout_sheets[["timepoint"]]
+#
+#   # Get metadata
+#   metadata_batch <- batch_metadata()
+#   project_id <- userWorkSpaceID()
+#   workspace_id <- userWorkSpaceID()
+#   auth0_user <- currentuser()
+#
+#   # Extract study/experiment from plates_map
+#   study_accession <- unique(plates_map$study_name)[1]
+#   experiment_accession <- unique(plates_map$experiment_name)[1]
+#
+#   cat("  Study:", study_accession, "\n")
+#   cat("  Experiment:", experiment_accession, "\n")
+#   cat("  assay_response rows:", nrow(assay_response), "\n")
+#   cat("  plates_map rows:", nrow(plates_map), "\n")
+#
+#   cat("\n=== DEBUGGING MERGE KEY ALIGNMENT ===\n")
+#   cat("  plates_map columns:", paste(names(plates_map), collapse = ", "), "\n")
+#   cat("  assay_response columns:", paste(names(assay_response), collapse = ", "), "\n")
+#   # Check each key column
+#   key_cols <- c("project_id", "study_name", "experiment_name", "plateid", "well")
+#   cat("\n  Checking key columns:\n")
+#   for (col in key_cols) {
+#     pm_has <- col %in% names(plates_map)
+#     ar_has <- col %in% names(assay_response)
+#     cat("    ", col, ": plates_map=", pm_has, ", assay_response=", ar_has, "\n", sep="")
+#     if (pm_has && ar_has) {
+#       pm_vals <- unique(plates_map[[col]])
+#       ar_vals <- unique(assay_response[[col]])
+#       # For small sets, show values
+#       if (length(pm_vals) <= 5 && length(ar_vals) <= 5) {
+#         cat("      plates_map values: ", paste(pm_vals, collapse=", "), "\n", sep="")
+#         cat("      assay_response values: ", paste(ar_vals, collapse=", "), "\n", sep="")
+#       } else {
+#         cat("      plates_map unique count: ", length(pm_vals), "\n", sep="")
+#         cat("      assay_response unique count: ", length(ar_vals), "\n", sep="")
+#       }
+#       matches <- intersect(pm_vals, ar_vals)
+#       cat("      Matching values: ", length(matches), "/", length(pm_vals), "\n", sep="")
+#     }
+#   }
+#   cat("===========================================\n\n")
+#
+#   # CHECK FOR EXISTING PLATES
+#   plate_ids <- unique(plate_id_sheet$plate_id)
+#
+#   existing_plates <- check_existing_plates(
+#     conn = conn,
+#     project_id = project_id,
+#     study_accession = study_accession,
+#     experiment_accession = experiment_accession,
+#     plateids = plate_ids
+#   )
+#
+#   if (nrow(existing_plates) > 0) {
+#     cat("⚠ Plates already exist:\n")
+#     print(existing_plates)
+#     showNotification(
+#       "These plates already exist for this study and experiment.",
+#       type = "warning",
+#       duration = 5
+#     )
+#     return(NULL)
+#   }
+#
+#   # PREPARE COLUMN MAPPING
+#   col_mapping <- create_column_mapping()
+#   # Natural key for joining plates_map to assay_response
+#   natural_key <- c("study_name", "experiment_name", "plateid", "well")
+#
+#   # Helper: fill missing sampleid values that would cause NOT NULL violations.
+#   # biosample_id_barcode is derived from Type (e.g. "X145" → "145") but xPONENT
+#   # Types often lack numeric suffixes ("X", "S1", "B"), so the barcode may be
+#
+#   # empty after the Excel round-trip.
+#   fill_missing_sampleid <- function(df, specimen_type = c("X", "S", "C")) {
+#     specimen_type <- match.arg(specimen_type)
+#     if (!"sampleid" %in% names(df)) df$sampleid <- NA_character_
+#
+#     needs_fill <- is.na(df$sampleid) | trimws(df$sampleid) == ""
+#
+#     if (!any(needs_fill)) return(df)
+#
+#     if (specimen_type == "X") {
+#       # Samples: use patientid (subject_id) — preserves replicate semantics
+#       if ("patientid" %in% names(df)) {
+#         df$sampleid[needs_fill] <- df$patientid[needs_fill]
+#       }
+#     } else {
+#       # Standards / Controls: use dilution factor as identifier
+#       if ("dilution" %in% names(df)) {
+#         df$sampleid[needs_fill] <- as.character(df$dilution[needs_fill])
+#       }
+#     }
+#
+#     # Final fallback: use well position (always present, always non-null)
+#     still_empty <- is.na(df$sampleid) | trimws(df$sampleid) == ""
+#     if (any(still_empty) && "well" %in% names(df)) {
+#       df$sampleid[still_empty] <- df$well[still_empty]
+#     }
+#
+#     return(df)
+#   }
+#
+#
+#   # PREPARE HEADER DATA
+#
+#   cat("\n  Preparing header data...\n")
+#
+#   header_data <- plate_id_sheet
+#   header_data$workspace_id <- workspace_id
+#   header_data$auth0_user <- auth0_user
+#   header_data$assay_response_variable <- "mfi"
+#   header_data$assay_independent_variable <- "concentration"
+#
+#   # Apply column mapping
+#   header_data <- apply_column_mapping(header_data, col_mapping)
+#
+#   # Rename specific columns for database
+#   if ("plate_filename" %in% names(header_data)) {
+#     names(header_data)[names(header_data) == "plate_filename"] <- "file_name"
+#   }
+#
+#   # Select required columns
+#   header_cols <- c(
+#     "study_accession", "experiment_accession", "plate_id", "file_name",
+#     "acquisition_date", "reader_serial_number", "rp1_pmt_volts", "rp1_target",
+#     "auth0_user", "workspace_id", "plateid", "plate",
+#     "n_wells", "assay_response_variable", "assay_independent_variable",
+#     "nominal_sample_dilution", "project_id"
+#   )
+#   available_header_cols <- intersect(header_cols, names(header_data))
+#   header_data <- header_data[, available_header_cols, drop = FALSE]
+#
+#   # Deduplicate
+#   nk_cols <- intersect(c("project_id", "study_accession", "experiment_accession", "plate_id", "nominal_sample_dilution"), names(header_data))
+#   header_data <- header_data[!duplicated(header_data[, nk_cols, drop = FALSE]), ]
+#
+#   cat("    → Header rows:", nrow(header_data), "\n")
+#
+#
+#   # PREPARE SAMPLE DATA (X)
+#   cat("  Preparing sample data...\n")
+#
+#   sample_map <- plates_map[which(substr(plates_map$specimen_type, 1, 1) == "X"), ]
+#
+#   if (nrow(sample_map) > 0 && !is.null(subject_map)) {
+#     # Join subject_groups for groupa/groupb
+#     sample_map <- merge(
+#       sample_map,
+#       subject_map,
+#       by = c("study_name", "subject_id"),
+#       all.x = TRUE
+#     )
+#     sample_map$agroup <- ifelse(
+#       is.na(sample_map$groupb),
+#       sample_map$groupa,
+#       paste(sample_map$groupa, sample_map$groupb, sep = "_")
+#     )
+#   }
+#
+#   if (nrow(sample_map) > 0) {
+#     # Join with assay_response - FIXED: removed antigen_label_on_plate
+#     assay_cols <- intersect(
+#       c(natural_key, "antigen", "assay_response", "assay_bead_count"),
+#       names(assay_response)
+#     )
+#
+#     samples_to_upload <- merge(
+#       sample_map,
+#       assay_response[, assay_cols, drop = FALSE],
+#       by = natural_key,
+#       all.x = TRUE
+#     )
+#
+#     if (!"plate_id" %in% names(samples_to_upload) && "plate_id" %in% names(plate_id_sheet)) {
+#       cat("    → Joining plate_id from plate_id_sheet...\n")
+#       plate_id_lookup <- unique(plate_id_sheet[, c("plateid", "plate_id"), drop = FALSE])
+#       samples_to_upload <- merge(
+#         samples_to_upload,
+#         plate_id_lookup,
+#         by = "plateid",
+#         all.x = TRUE
+#       )
+#     }
+#
+#     # Apply column mapping
+#     samples_to_upload <- apply_column_mapping(samples_to_upload, col_mapping)
+#
+#     # Fill missing sampleid (xPONENT Types lack numeric suffixes)
+#     samples_to_upload <- fill_missing_sampleid(samples_to_upload, "X")
+#
+#     # Select required columns
+#     sample_cols <- c(
+#       "project_id", "study_accession", "experiment_accession", "timeperiod",
+#       "patientid", "well", "stype", "sampleid", "agroup", "dilution",
+#       "pctaggbeads", "samplingerrors", "antigen", "antibody_mfi", "antibody_n",
+#       "feature", "plate", "nominal_sample_dilution", "plateid","plate_id"
+#     )
+#     available_sample_cols <- intersect(sample_cols, names(samples_to_upload))
+#     samples_to_upload <- samples_to_upload[, available_sample_cols, drop = FALSE]
+#
+#     cat("    → Sample rows:", nrow(samples_to_upload), "\n")
+#   } else {
+#     samples_to_upload <- NULL
+#     cat("    → No samples found\n")
+#   }
+#
+#   # PREPARE STANDARD DATA (S)
+#   cat("  Preparing standard data...\n")
+#   standard_map <- plates_map[which(substr(plates_map$specimen_type, 1, 1) == "S"), ]
+#
+#   if (nrow(standard_map) > 0) {
+#     # Join with assay_response
+#     assay_cols <- intersect(
+#       c(natural_key, "antigen", "assay_response", "assay_bead_count"),
+#       names(assay_response)
+#     )
+#
+#     standards_to_upload <- merge(
+#       standard_map,
+#       assay_response[, assay_cols, drop = FALSE],
+#       by = natural_key,
+#       all.x = TRUE
+#     )
+#
+#     # Ensure plate_id is present
+#     if (!"plate_id" %in% names(standards_to_upload) && "plate_id" %in% names(plate_id_sheet)) {
+#       cat("    → Joining plate_id from plate_id_sheet...\n")
+#       plate_id_lookup <- unique(plate_id_sheet[, c("plateid", "plate_id"), drop = FALSE])
+#       standards_to_upload <- merge(
+#         standards_to_upload,
+#         plate_id_lookup,
+#         by = "plateid",
+#         all.x = TRUE
+#       )
+#     }
+#
+#     # Apply column mapping
+#     standards_to_upload <- apply_column_mapping(standards_to_upload, col_mapping)
+#
+#     # Fill missing sampleid (xPONENT Types lack numeric suffixes)
+#     standards_to_upload <- fill_missing_sampleid(standards_to_upload, "S")
+#
+#     # Select required columns
+#     standard_cols <- c(
+#       "project_id", "study_accession", "experiment_accession", "plate_id", "well",
+#       "stype", "sampleid", "source", "dilution", "pctaggbeads", "samplingerrors",
+#       "antigen", "antibody_mfi", "antibody_n", "feature",
+#       "plateid", "nominal_sample_dilution", "plate"
+#     )
+#     available_standard_cols <- intersect(standard_cols, names(standards_to_upload))
+#     standards_to_upload <- standards_to_upload[, available_standard_cols, drop = FALSE]
+#
+#     cat("    → Standard rows:", nrow(standards_to_upload), "\n")
+#   } else {
+#     standards_to_upload <- NULL
+#     cat("    → No standards found\n")
+#   }
+#
+#   # PREPARE BLANK DATA (B)
+#   cat("  Preparing blank data...\n")
+#   blank_map <- plates_map[which(substr(plates_map$specimen_type, 1, 1) == "B"), ]
+#
+#   if (nrow(blank_map) > 0) {
+#     # Join with assay_response - FIXED: removed antigen_label_on_plate
+#     assay_cols <- intersect(
+#       c(natural_key, "antigen", "assay_response", "assay_bead_count"),
+#       names(assay_response)
+#     )
+#
+#     blanks_to_upload <- merge(
+#       blank_map,
+#       assay_response[, assay_cols, drop = FALSE],
+#       by = natural_key,
+#       all.x = TRUE
+#     )
+#
+#     # ADDED: Ensure plate_id is present
+#     if (!"plate_id" %in% names(blanks_to_upload) && "plate_id" %in% names(plate_id_sheet)) {
+#       cat("    → Joining plate_id from plate_id_sheet...\n")
+#       plate_id_lookup <- unique(plate_id_sheet[, c("plateid", "plate_id"), drop = FALSE])
+#       blanks_to_upload <- merge(
+#         blanks_to_upload,
+#         plate_id_lookup,
+#         by = "plateid",
+#         all.x = TRUE
+#       )
+#     }
+#
+#     blanks_to_upload <- apply_column_mapping(blanks_to_upload, col_mapping)
+#
+#     blank_cols <- c(
+#       "study_accession", "experiment_accession", "plate_id", "well",
+#       "stype", "dilution", "pctaggbeads", "samplingerrors",
+#       "antigen", "antibody_mfi", "antibody_n", "feature", "project_id",
+#       "plateid", "nominal_sample_dilution", "plate"
+#     )
+#     available_blank_cols <- intersect(blank_cols, names(blanks_to_upload))
+#     blanks_to_upload <- blanks_to_upload[, available_blank_cols, drop = FALSE]
+#
+#     cat("    → Blank rows:", nrow(blanks_to_upload), "\n")
+#   } else {
+#     blanks_to_upload <- NULL
+#     cat("    → No blanks found\n")
+#   }
+#
+#
+#   # PREPARE CONTROL DATA (C)
+#   cat("  Preparing control data...\n")
+#   control_map <- plates_map[which(substr(plates_map$specimen_type, 1, 1) == "C"), ]
+#
+#   if (nrow(control_map) > 0) {
+#     # Join with assay_response - FIXED: removed antigen_label_on_plate
+#     assay_cols <- intersect(
+#       c(natural_key, "antigen", "assay_response", "assay_bead_count"),
+#       names(assay_response)
+#     )
+#
+#     controls_to_upload <- merge(
+#       control_map,
+#       assay_response[, assay_cols, drop = FALSE],
+#       by = natural_key,
+#       all.x = TRUE
+#     )
+#
+#     if (!"plate_id" %in% names(controls_to_upload) && "plate_id" %in% names(plate_id_sheet)) {
+#       cat("    → Joining plate_id from plate_id_sheet...\n")
+#       plate_id_lookup <- unique(plate_id_sheet[, c("plateid", "plate_id"), drop = FALSE])
+#       controls_to_upload <- merge(
+#         controls_to_upload,
+#         plate_id_lookup,
+#         by = "plateid",
+#         all.x = TRUE
+#       )
+#     }
+#
+#     controls_to_upload <- apply_column_mapping(controls_to_upload, col_mapping)
+#
+#     # Fill missing sampleid (xPONENT Types lack numeric suffixes)
+#     controls_to_upload <- fill_missing_sampleid(controls_to_upload, "C")
+#
+#     control_cols <- c(
+#       "study_accession", "experiment_accession", "plate_id", "well",
+#       "stype", "sampleid", "source", "dilution", "pctaggbeads", "samplingerrors",
+#       "antigen", "antibody_mfi", "antibody_n", "feature", "project_id",
+#       "plateid", "nominal_sample_dilution", "plate"
+#     )
+#     available_control_cols <- intersect(control_cols, names(controls_to_upload))
+#     controls_to_upload <- controls_to_upload[, available_control_cols, drop = FALSE]
+#
+#     cat("    → Control rows:", nrow(controls_to_upload), "\n")
+#   } else {
+#     controls_to_upload <- NULL
+#     cat("    → No controls found\n")
+#   }
+#
+#
+#   # PREPARE ANTIGEN FAMILY DATA
+#
+#   cat("  Preparing antigen family data...\n")
+#
+#   antigen_cols_needed <- c(
+#     "project_id", "study_name", "experiment_name", "antigen_abbreviation", "antigen_family",
+#     "standard_curve_max_concentration", "antigen_name", "virus_bacterial_strain",
+#     "antigen_source", "catalog_number", "l_asy_min_constraint",
+#     "l_asy_max_constraint", "l_asy_constraint_method"
+#   )
+#   available_antigen_cols <- intersect(antigen_cols_needed, names(antigen_list))
+#   antigens_to_upload <- antigen_list[, available_antigen_cols, drop = FALSE]
+#
+#   if ("standard_curve_max_concentration" %in% names(antigens_to_upload)) {
+#     names(antigens_to_upload)[names(antigens_to_upload) == "standard_curve_max_concentration"] <- "standard_curve_concentration"
+#   }
+#
+#   antigens_to_upload <- apply_column_mapping(antigens_to_upload, col_mapping)
+#   cat("    → Antigen rows:", nrow(antigens_to_upload), "\n")
+#
+#
+#   # PREPARE PLANNED VISITS DATA
+#
+#   cat("  Preparing planned visits data...\n")
+#
+#   visits_to_upload <- timepoint_map
+#
+#   if (!is.null(visits_to_upload)) {
+#     names(visits_to_upload)[names(visits_to_upload) == "timepoint_tissue_abbreviation"] <- "timepoint_name"
+#     names(visits_to_upload)[names(visits_to_upload) == "tissue_type"] <- "type"
+#     names(visits_to_upload)[names(visits_to_upload) == "tissue_subtype"] <- "subtype"
+#     names(visits_to_upload)[names(visits_to_upload) == "description"] <- "end_rule"
+#     names(visits_to_upload)[names(visits_to_upload) == "min_time_since_day_0"] <- "min_start_day"
+#     names(visits_to_upload)[names(visits_to_upload) == "max_time_since_day_0"] <- "max_start_day"
+#
+#     visits_to_upload <- apply_column_mapping(visits_to_upload, col_mapping)
+#     cat("    → Visit rows:", nrow(visits_to_upload), "\n")
+#   } else {
+#     cat("    → No visits found\n")
+#   }
+#
+#
+#   # UPLOAD TO DATABASE
+#
+#   cat("\n╔══════════════════════════════════════════════════════════╗\n")
+#   cat("║  INSERTING DATA INTO DATABASE                            ║\n")
+#   cat("╚══════════════════════════════════════════════════════════╝\n")
+#
+#   result <- list(
+#     success = FALSE,
+#     already_exists = FALSE,
+#     counts = list(header = 0, samples = 0, standards = 0, blanks = 0, controls = 0, antigens = 0, visits = 0),
+#     errors = list(),
+#     message = ""
+#   )
+#
+#   # Insert header
+#   if (!is.null(header_data) && nrow(header_data) > 0) {
+#     cat("  Inserting header...\n")
+#     # Standardize acquisition_date to ISO format for PostgreSQL
+#     if ("acquisition_date" %in% names(header_data)) {
+#       header_data$acquisition_date <- standardize_date_for_postgres(header_data$acquisition_date)
+#     }
+#     header_result <- insert_to_table(
+#       conn, "madi_results", "xmap_header", header_data, "header",
+#       required_cols = c("project_id", "study_accession", "plate_id")
+#     )
+#     result$counts$header <- header_result$rows_inserted
+#
+#     if (!header_result$success) {
+#       result$errors$header <- header_result$message
+#       result$message <- "Failed to upload header"
+#       cat("    ✗ Header insert failed:", header_result$message, "\n")
+#     } else {
+#       cat("    ✓ Header inserted:", header_result$rows_inserted, "rows\n")
+#     }
+#   }
+#
+#   # Insert samples
+#   if (!is.null(samples_to_upload) && nrow(samples_to_upload) > 0 && length(result$errors) == 0) {
+#     cat("  Inserting samples...\n")
+#     sample_result <- insert_to_table(
+#       conn, "madi_results", "xmap_sample", samples_to_upload, "sample",
+#       required_cols = c("project_id", "study_accession", "plate_id", "well", "antigen")
+#     )
+#     result$counts$samples <- sample_result$rows_inserted
+#
+#     # ── register curve combinations
+#     if (standard_result$success) {
+#       cl_result <- register_curve_lookup(
+#         conn        = conn,
+#         standards_df = standards_to_upload,   # already in DB column names
+#         project_id  = userWorkSpaceID()
+#       )
+#       if (!cl_result$success) {
+#         # Non-fatal — log but don't block the upload
+#         showNotification(
+#           paste("curve_lookup warning:", cl_result$message),
+#           type = "warning", duration = 8
+#         )
+#       } else {
+#         cat("  curve_lookup:", cl_result$message, "\n")
+#       }
+#     }
+#     # ── END register curve combinations
+#
+#     if (!sample_result$success) {
+#       result$errors$samples <- sample_result$message
+#       cat("    ✗ Sample insert failed:", sample_result$message, "\n")
+#     } else {
+#       cat("    ✓ Samples inserted:", sample_result$rows_inserted, "rows\n")
+#     }
+#   }
+#
+#   # Insert standards
+#   if (!is.null(standards_to_upload) && nrow(standards_to_upload) > 0) {
+#     cat("  Inserting standards...\n")
+#     standard_result <- insert_to_table(
+#       conn, "madi_results", "xmap_standard", standards_to_upload, "standard",
+#       required_cols = c("project_id", "study_accession", "plate_id", "well", "antigen")
+#     )
+#     result$counts$standards <- standard_result$rows_inserted
+#
+#     if (!standard_result$success) {
+#       result$errors$standards <- standard_result$message
+#       cat("    ✗ Standard insert failed:", standard_result$message, "\n")
+#     } else {
+#       cat("    ✓ Standards inserted:", standard_result$rows_inserted, "rows\n")
+#     }
+#   }
+#
+#   # Insert blanks
+#   if (!is.null(blanks_to_upload) && nrow(blanks_to_upload) > 0) {
+#     cat("  Inserting blanks...\n")
+#     blank_result <- insert_to_table(
+#       conn, "madi_results", "xmap_buffer", blanks_to_upload, "blank",
+#       required_cols = c("project_id", "study_accession", "plate_id", "well", "antigen")
+#     )
+#     result$counts$blanks <- blank_result$rows_inserted
+#
+#     if (!blank_result$success) {
+#       result$errors$blanks <- blank_result$message
+#       cat("    ✗ Blank insert failed:", blank_result$message, "\n")
+#     } else {
+#       cat("    ✓ Blanks inserted:", blank_result$rows_inserted, "rows\n")
+#     }
+#   }
+#
+#   # Insert controls
+#   if (!is.null(controls_to_upload) && nrow(controls_to_upload) > 0) {
+#     cat("  Inserting controls...\n")
+#     control_result <- insert_to_table(
+#       conn, "madi_results", "xmap_control", controls_to_upload, "control",
+#       required_cols = c("project_id", "study_accession", "plate_id", "well", "antigen")
+#     )
+#     result$counts$controls <- control_result$rows_inserted
+#
+#     if (!control_result$success) {
+#       result$errors$controls <- control_result$message
+#       cat("    ✗ Control insert failed:", control_result$message, "\n")
+#     } else {
+#       cat("    ✓ Controls inserted:", control_result$rows_inserted, "rows\n")
+#     }
+#   }
+#
+#   # Insert antigens (with deduplication)
+#   if (!is.null(antigens_to_upload) && nrow(antigens_to_upload) > 0) {
+#     cat("  Inserting antigens...\n")
+#     existing_antigens <- get_existing_antigens(conn, study_accession, experiment_accession)
+#
+#     result$counts$antigens <- insert_new_rows(
+#       conn, "madi_results", "xmap_antigen_family",
+#       new_data = antigens_to_upload,
+#       existing_data = existing_antigens,
+#       join_keys = c("study_accession", "experiment_accession", "antigen"),
+#       label = "antigen family"
+#     )
+#     cat("    ✓ Antigens inserted:", result$counts$antigens, "rows\n")
+#   }
+#
+#   # Insert visits (with deduplication)
+#   if (!is.null(visits_to_upload) && nrow(visits_to_upload) > 0) {
+#     cat("  Inserting visits...\n")
+#     existing_visits <- get_existing_visits(conn, study_accession)
+#
+#     result$counts$visits <- insert_new_rows(
+#       conn, "madi_results", "xmap_planned_visit",
+#       new_data = visits_to_upload,
+#       existing_data = existing_visits,
+#       join_keys = c("study_accession", "timepoint_name"),
+#       label = "planned visit"
+#     )
+#     cat("    ✓ Visits inserted:", result$counts$visits, "rows\n")
+#   }
+#
+#
+#   # FINALIZE RESULT
+#
+#   result$success <- length(result$errors) == 0
+#   result$message <- if (result$success) {
+#     "Batch uploaded successfully"
+#   } else {
+#     paste("Upload completed with errors:", paste(names(result$errors), collapse = ", "))
+#   }
+#
+#   # Update validation state
+#   if (result$success) {
+#     current_state <- batch_validation_state()
+#     batch_validation_state(list(
+#       is_validated = current_state$is_validated,
+#       is_uploaded = TRUE,
+#       validation_time = current_state$validation_time,
+#       upload_time = Sys.time(),
+#       metadata_result = current_state$metadata_result,
+#       bead_array_result = current_state$bead_array_result
+#     ))
+#   }
+#
+#
+#   # SHOW NOTIFICATIONS
+#
+#   if (result$success) {
+#     counts <- result$counts
+#     detail_message <- sprintf(
+#       "Uploaded: %d headers, %d samples, %d standards, %d blanks, %d controls, %d antigens, %d visits",
+#       counts$header, counts$samples, counts$standards,
+#       counts$blanks, counts$controls, counts$antigens, counts$visits
+#     )
+#
+#     showNotification("Batch Uploaded Successfully", type = "message", duration = 5)
+#     showNotification(detail_message, type = "message", duration = 10)
+#
+#     cat("\n✓ UPLOAD COMPLETE\n")
+#     cat(detail_message, "\n")
+#   } else {
+#     showNotification(
+#       paste("Upload failed:", result$message),
+#       type = "error",
+#       duration = NULL
+#     )
+#
+#     for (error_name in names(result$errors)) {
+#       showNotification(
+#         paste(error_name, "error:", result$errors[[error_name]]),
+#         type = "error",
+#         duration = NULL
+#       )
+#     }
+#
+#     cat("\n✗ UPLOAD FAILED\n")
+#     cat("Errors:", paste(names(result$errors), collapse = ", "), "\n")
+#   }
+#
+#   cat("╚══════════════════════════════════════════════════════════╝\n\n")
+# })
 
 # SERVER: Execute deletion when confirmation is received
 observeEvent(input$delete_confirmation, {

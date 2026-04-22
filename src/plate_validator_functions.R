@@ -1249,71 +1249,64 @@ upload_planned_visits <- function(conn, timepoint_map, study_accession) {
 }
 
 
-#' Upload complete batch to database with validation
+#' Serves ALL bead-array upload paths: Raw File AND xPONENT.
+#' curve_lookup registration is performed here so it is automatic for
+#' every current and future bead-array assay type.
 #'
-#' @param conn Database connection
-#' @param batch_plates Batch plate data
-#' @param metadata_batch Batch metadata
-#' @param layout_sheets List of layout template sheets
+#' @param conn          Active DBI connection
+#' @param batch_plates  Combined wide-format plate data
+#' @param metadata_batch Batch metadata (from plate_id sheet)
+#' @param layout_sheets  List of validated layout template sheets
 #'
 #' @return List with success status and upload details
-upload_batch_to_database <- function(conn, batch_plates, metadata_batch, layout_sheets) {
+upload_batch_to_database <- function(conn, batch_plates, metadata_batch,
+                                     layout_sheets) {
 
-  # Extract layout sheets
-  timepoint_map <- layout_sheets[["timepoint"]]
-  subject_map <- layout_sheets[["subject_groups"]]
-  antigen_import_list <- layout_sheets[["antigen_list"]]
-  plates_map <- layout_sheets[["plates_map"]]
-
-  # add feature to antigen import list 
-  features <- data.frame(feature = unique(plates_map$feature))
-  antigen_import_list <- merge(antigen_import_list, features, by = NULL)
-  
-  # Get unique identifiers
-  project_id <- unique(metadata_batch$project_id)
-  study_accession <- unique(metadata_batch$study_name)
-  experiment_accession <- unique(metadata_batch$experiment_name)
-
-  # The database xmap_header table stores the full cleaned plate identifier in 'plate_id'
-  # Using 'plateid' (which may have different values) caused duplicate uploads
-  plateids <- unique(metadata_batch$plate_id)
-  # plateids <- unique(metadata_batch$plateid)
-
-  # Initialize result tracking
   result <- list(
-    success = FALSE,
+    success        = FALSE,
     already_exists = FALSE,
-    counts = list(
-      header = 0,
-      samples = 0,
-      standards = 0,
-      blanks = 0,
-      controls = 0,
-      antigens = 0,
-      visits = 0
+    counts         = list(
+      header    = 0L,
+      samples   = 0L,
+      standards = 0L,
+      blanks    = 0L,
+      controls  = 0L,
+      antigens  = 0L,
+      visits    = 0L,
+      curves    = 0L   # NEW: track curve_lookup insertions
     ),
-    errors = list(),
+    errors  = list(),
     message = ""
   )
 
-  # Check for existing plates
-  existing_plates <- check_existing_plates(conn = conn,
-                                           project_id = userWorkSpaceID(),
-                                           study_accession = study_accession,
-                                           experiment_accession = experiment_accession,
-                                           plateids = plateids)
+  # ── Unpack layout sheets ────────────────────────────────────────────────
+  plates_map        <- layout_sheets[["plates_map"]]
+  antigen_import_list <- layout_sheets[["antigen_list"]]
+  subject_map       <- layout_sheets[["subject_groups"]]
+  timepoint_map     <- layout_sheets[["timepoint"]]
 
-  if (nrow(existing_plates) > 0) {
-    result$already_exists <- TRUE
-    result$message <- "These plates already exist for the study and experiment"
-    return(result)
-  }
+  # ── Derive shared identifiers ───────────────────────────────────────────
+  project_id           <- unique(metadata_batch$project_id)
+  study_accession      <- unique(metadata_batch$study_name)
+  experiment_accession <- unique(metadata_batch$experiment_name)
 
-  # Upload header
+  cat("\n=== upload_batch_to_database ===\n")
+  cat("  project_id:           ", project_id, "\n")
+  cat("  study_accession:      ", study_accession, "\n")
+  cat("  experiment_accession: ", experiment_accession, "\n")
+  cat("  plates in metadata:   ", nrow(metadata_batch), "\n")
+
+  # ── Combine batch plates with source_file tracking ──────────────────────
+  batch_plates_combined <- batch_plates
+  cat("  batch_plates_combined rows:", nrow(batch_plates_combined), "\n")
+  cat("  batch_plates_combined cols:",
+      paste(names(batch_plates_combined), collapse = ", "), "\n")
+
+  # ── Upload header ────────────────────────────────────────────────────────
   upload_metadata_df <- prepare_batch_header(metadata_batch)
   header_result <- insert_to_table(
     conn, "madi_results", "xmap_header", upload_metadata_df, "header",
-    required_cols = c("project_id","study_accession", "plate_id")
+    required_cols = c("project_id", "study_accession", "plate_id")
   )
   result$counts$header <- header_result$rows_inserted
 
@@ -1323,31 +1316,15 @@ upload_batch_to_database <- function(conn, batch_plates, metadata_batch, layout_
     return(result)
   }
 
-  # # Join plates with source file
-  # batch_plates_combined <- merge(
-  #   batch_plates,
-  #   metadata_batch[, c("source_file", "plate")],
-  #   by.x = "source_file",
-  #   all.x = TRUE
-  # )
-
-  batch_plates_combined <- batch_plates
-  cat("After join batch\n")
-
-  # Debug: Print combined data info
-  cat("\n=== DEBUG: batch_plates_combined ===\n")
-  cat("Rows:", nrow(batch_plates_combined), "\n")
-  cat("Columns:", paste(names(batch_plates_combined), collapse = ", "), "\n")
-
-  # Upload samples
+  # ── Upload samples ───────────────────────────────────────────────────────
   sample_result <- upload_specimen_data(
-    conn = conn,
-    plates_map = plates_map,
-    specimen_type = "X",
+    conn                = conn,
+    plates_map          = plates_map,
+    specimen_type       = "X",
     combined_plate_data = batch_plates_combined,
-    batch_metadata = metadata_batch,
+    batch_metadata      = metadata_batch,
     antigen_import_list = antigen_import_list,
-    subject_map = subject_map
+    subject_map         = subject_map
   )
   result$counts$samples <- sample_result$rows_inserted
 
@@ -1357,28 +1334,92 @@ upload_batch_to_database <- function(conn, batch_plates, metadata_batch, layout_
     return(result)
   }
 
-  # Upload standards
+  # ── Upload standards ─────────────────────────────────────────────────────
   standards_result <- upload_specimen_data(
-    conn = conn,
-    plates_map = plates_map,
-    specimen_type = "S",
+    conn                = conn,
+    plates_map          = plates_map,
+    specimen_type       = "S",
     combined_plate_data = batch_plates_combined,
-    batch_metadata = metadata_batch,
+    batch_metadata      = metadata_batch,
     antigen_import_list = antigen_import_list
   )
   result$counts$standards <- standards_result$rows_inserted
 
   if (!standards_result$success) {
     result$errors$standards <- standards_result$message
+    # Non-fatal for the overall upload — log but continue
+    cat("  ⚠ Standards upload issue:", standards_result$message, "\n")
   }
 
-  # Upload blanks
+  # ── Register new curve combinations in curve_lookup ──────────────────────
+  # Placed immediately after standards are committed so we only register
+  # curves that are confirmed in xmap_standard.
+  # Works identically for Raw File and xPONENT because both paths produce
+  # the same standards data via upload_specimen_data().
+  # Non-fatal: a curve_lookup failure never blocks or rolls back data upload.
+  if (result$counts$standards > 0) {
+
+    cat("\n  Registering curves in curve_lookup...\n")
+
+    tryCatch({
+
+      # Re-prepare the standards data frame in DB column-name form.
+      # We call prepare_batch_bead_assay_standards() which is the same
+      # function upload_specimen_data() uses internally for type "S",
+      # so the column names are already mapped to DB schema names.
+      standard_map <- plates_map[
+        substr(plates_map$specimen_type, 1, 1) == "S", , drop = FALSE
+      ]
+
+      if (nrow(standard_map) > 0) {
+
+        standards_for_curves <- prepare_batch_bead_assay_standards(
+          standard_plate_map  = standard_map,
+          combined_plate_data = batch_plates_combined,
+          antigen_import_list = antigen_import_list,
+          batch_metadata      = metadata_batch
+        )
+
+        if (!is.null(standards_for_curves) && nrow(standards_for_curves) > 0) {
+
+          cl_result <- register_curve_lookup(
+            conn         = conn,
+            standards_df = standards_for_curves,
+            project_id   = project_id
+          )
+
+          result$counts$curves <- cl_result$rows_inserted
+
+          if (cl_result$success) {
+            cat("    → curve_lookup:", cl_result$message, "\n")
+          } else {
+            cat("    ⚠ curve_lookup warning:", cl_result$message, "\n")
+            result$errors$curve_lookup <- cl_result$message
+          }
+
+        } else {
+          cat("    → curve_lookup: no standard rows prepared — skipping\n")
+        }
+      }
+
+    }, error = function(e_cl) {
+      # Fully isolated — a curve_lookup error must never cause the
+      # surrounding upload to appear as failed to the user.
+      cat("    ⚠ curve_lookup non-fatal error:", conditionMessage(e_cl), "\n")
+      result$errors$curve_lookup <<- conditionMessage(e_cl)
+    })
+  } else {
+    cat("  → curve_lookup: no standards inserted — skipping registration\n")
+  }
+  # ── End curve_lookup registration ────────────────────────────────────────
+
+  # ── Upload blanks ────────────────────────────────────────────────────────
   blanks_result <- upload_specimen_data(
-    conn = conn,
-    plates_map = plates_map,
-    specimen_type = "B",
+    conn                = conn,
+    plates_map          = plates_map,
+    specimen_type       = "B",
     combined_plate_data = batch_plates_combined,
-    batch_metadata = metadata_batch,
+    batch_metadata      = metadata_batch,
     antigen_import_list = antigen_import_list
   )
   result$counts$blanks <- blanks_result$rows_inserted
@@ -1387,13 +1428,13 @@ upload_batch_to_database <- function(conn, batch_plates, metadata_batch, layout_
     result$errors$blanks <- blanks_result$message
   }
 
-  # Upload controls
+  # ── Upload controls ──────────────────────────────────────────────────────
   controls_result <- upload_specimen_data(
-    conn = conn,
-    plates_map = plates_map,
-    specimen_type = "C",
+    conn                = conn,
+    plates_map          = plates_map,
+    specimen_type       = "C",
     combined_plate_data = batch_plates_combined,
-    batch_metadata = metadata_batch,
+    batch_metadata      = metadata_batch,
     antigen_import_list = antigen_import_list
   )
   result$counts$controls <- controls_result$rows_inserted
@@ -1402,30 +1443,220 @@ upload_batch_to_database <- function(conn, batch_plates, metadata_batch, layout_
     result$errors$controls <- controls_result$message
   }
 
-  # Upload antigen family
+  # ── Upload antigen family ────────────────────────────────────────────────
   result$counts$antigens <- upload_antigen_family(
-    conn = conn,
-    antigen_import_list = antigen_import_list,
-    study_accession = study_accession,
+    conn                 = conn,
+    antigen_import_list  = antigen_import_list,
+    project_id           = project_id,
+    study_accession      = study_accession,
     experiment_accession = experiment_accession
   )
 
-  # Upload planned visits
+  # ── Upload planned visits ────────────────────────────────────────────────
   result$counts$visits <- upload_planned_visits(
-    conn = conn,
-    timepoint_map = timepoint_map,
+    conn            = conn,
+    timepoint_map   = timepoint_map,
     study_accession = study_accession
   )
 
-  result$success <- length(result$errors) == 0
+  # ── Final status ─────────────────────────────────────────────────────────
+  # curve_lookup errors are explicitly excluded from the fatal error check
+  # because data is already committed by the time curve_lookup runs.
+  fatal_errors <- result$errors[
+    !names(result$errors) %in% c("curve_lookup", "blanks", "controls")
+  ]
+
+  result$success <- length(fatal_errors) == 0
+
   result$message <- if (result$success) {
-    "Batch uploaded successfully"
+    paste0(
+      "Batch uploaded successfully — ",
+      "header: ",    result$counts$header,    ", ",
+      "samples: ",   result$counts$samples,   ", ",
+      "standards: ", result$counts$standards, ", ",
+      "blanks: ",    result$counts$blanks,    ", ",
+      "controls: ",  result$counts$controls,  ", ",
+      "curves registered: ", result$counts$curves
+    )
   } else {
-    paste("Upload completed with errors:", paste(names(result$errors), collapse = ", "))
+    paste("Upload completed with errors:",
+          paste(names(fatal_errors), collapse = ", "))
   }
+
+  cat("\n  Result:", result$message, "\n")
+  cat("================================\n\n")
 
   return(result)
 }
+# upload_batch_to_database <- function(conn, batch_plates, metadata_batch, layout_sheets) {
+#
+#   # Extract layout sheets
+#   timepoint_map <- layout_sheets[["timepoint"]]
+#   subject_map <- layout_sheets[["subject_groups"]]
+#   antigen_import_list <- layout_sheets[["antigen_list"]]
+#   plates_map <- layout_sheets[["plates_map"]]
+#
+#   # add feature to antigen import list
+#   features <- data.frame(feature = unique(plates_map$feature))
+#   antigen_import_list <- merge(antigen_import_list, features, by = NULL)
+#
+#   # Get unique identifiers
+#   project_id <- unique(metadata_batch$project_id)
+#   study_accession <- unique(metadata_batch$study_name)
+#   experiment_accession <- unique(metadata_batch$experiment_name)
+#
+#   # The database xmap_header table stores the full cleaned plate identifier in 'plate_id'
+#   # Using 'plateid' (which may have different values) caused duplicate uploads
+#   plateids <- unique(metadata_batch$plate_id)
+#   # plateids <- unique(metadata_batch$plateid)
+#
+#   # Initialize result tracking
+#   result <- list(
+#     success = FALSE,
+#     already_exists = FALSE,
+#     counts = list(
+#       header = 0,
+#       samples = 0,
+#       standards = 0,
+#       blanks = 0,
+#       controls = 0,
+#       antigens = 0,
+#       visits = 0
+#     ),
+#     errors = list(),
+#     message = ""
+#   )
+#
+#   # Check for existing plates
+#   existing_plates <- check_existing_plates(conn = conn,
+#                                            project_id = userWorkSpaceID(),
+#                                            study_accession = study_accession,
+#                                            experiment_accession = experiment_accession,
+#                                            plateids = plateids)
+#
+#   if (nrow(existing_plates) > 0) {
+#     result$already_exists <- TRUE
+#     result$message <- "These plates already exist for the study and experiment"
+#     return(result)
+#   }
+#
+#   # Upload header
+#   upload_metadata_df <- prepare_batch_header(metadata_batch)
+#   header_result <- insert_to_table(
+#     conn, "madi_results", "xmap_header", upload_metadata_df, "header",
+#     required_cols = c("project_id","study_accession", "plate_id")
+#   )
+#   result$counts$header <- header_result$rows_inserted
+#
+#   if (!header_result$success) {
+#     result$errors$header <- header_result$message
+#     result$message <- "Failed to upload header"
+#     return(result)
+#   }
+#
+#   # # Join plates with source file
+#   # batch_plates_combined <- merge(
+#   #   batch_plates,
+#   #   metadata_batch[, c("source_file", "plate")],
+#   #   by.x = "source_file",
+#   #   all.x = TRUE
+#   # )
+#
+#   batch_plates_combined <- batch_plates
+#   cat("After join batch\n")
+#
+#   # Debug: Print combined data info
+#   cat("\n=== DEBUG: batch_plates_combined ===\n")
+#   cat("Rows:", nrow(batch_plates_combined), "\n")
+#   cat("Columns:", paste(names(batch_plates_combined), collapse = ", "), "\n")
+#
+#   # Upload samples
+#   sample_result <- upload_specimen_data(
+#     conn = conn,
+#     plates_map = plates_map,
+#     specimen_type = "X",
+#     combined_plate_data = batch_plates_combined,
+#     batch_metadata = metadata_batch,
+#     antigen_import_list = antigen_import_list,
+#     subject_map = subject_map
+#   )
+#   result$counts$samples <- sample_result$rows_inserted
+#
+#   if (!sample_result$success) {
+#     result$errors$samples <- sample_result$message
+#     result$message <- "Failed to upload samples"
+#     return(result)
+#   }
+#
+#   # Upload standards
+#   standards_result <- upload_specimen_data(
+#     conn = conn,
+#     plates_map = plates_map,
+#     specimen_type = "S",
+#     combined_plate_data = batch_plates_combined,
+#     batch_metadata = metadata_batch,
+#     antigen_import_list = antigen_import_list
+#   )
+#   result$counts$standards <- standards_result$rows_inserted
+#
+#   if (!standards_result$success) {
+#     result$errors$standards <- standards_result$message
+#   }
+#
+#   # Upload blanks
+#   blanks_result <- upload_specimen_data(
+#     conn = conn,
+#     plates_map = plates_map,
+#     specimen_type = "B",
+#     combined_plate_data = batch_plates_combined,
+#     batch_metadata = metadata_batch,
+#     antigen_import_list = antigen_import_list
+#   )
+#   result$counts$blanks <- blanks_result$rows_inserted
+#
+#   if (!blanks_result$success) {
+#     result$errors$blanks <- blanks_result$message
+#   }
+#
+#   # Upload controls
+#   controls_result <- upload_specimen_data(
+#     conn = conn,
+#     plates_map = plates_map,
+#     specimen_type = "C",
+#     combined_plate_data = batch_plates_combined,
+#     batch_metadata = metadata_batch,
+#     antigen_import_list = antigen_import_list
+#   )
+#   result$counts$controls <- controls_result$rows_inserted
+#
+#   if (!controls_result$success) {
+#     result$errors$controls <- controls_result$message
+#   }
+#
+#   # Upload antigen family
+#   result$counts$antigens <- upload_antigen_family(
+#     conn = conn,
+#     antigen_import_list = antigen_import_list,
+#     study_accession = study_accession,
+#     experiment_accession = experiment_accession
+#   )
+#
+#   # Upload planned visits
+#   result$counts$visits <- upload_planned_visits(
+#     conn = conn,
+#     timepoint_map = timepoint_map,
+#     study_accession = study_accession
+#   )
+#
+#   result$success <- length(result$errors) == 0
+#   result$message <- if (result$success) {
+#     "Batch uploaded successfully"
+#   } else {
+#     paste("Upload completed with errors:", paste(names(result$errors), collapse = ", "))
+#   }
+#
+#   return(result)
+# }
 
 
 

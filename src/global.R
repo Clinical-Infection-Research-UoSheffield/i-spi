@@ -244,7 +244,7 @@ get_db_connection_from_args <- function(host, port, dbname, user, pass) {
     sslmode = 'require',
     options = "-c search_path=madi_results"
   )
-  
+
 }
 # Function to get project name
 getProjectName <- function(conn, current_user) {

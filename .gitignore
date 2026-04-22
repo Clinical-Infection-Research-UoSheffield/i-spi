@@ -33,4 +33,5 @@ shiny-server.sock
 .Rapp.auth.secret.user.superadmin
 .Rproj
 .DS_Store
+i-spi-add-fcuploader.Rproj
 

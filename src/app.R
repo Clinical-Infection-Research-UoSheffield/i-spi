@@ -5,8 +5,8 @@ source("global.R", local = TRUE)
 
 # Set to 1 for local and do not push in prod
 # Sys.setenv(LOCAL_DEV = "1")
-# local_email_user <- "seamus.owen.stein@dartmouth.edu"
-#local_email_user <- "mscotzens@gmail.com"
+# # local_email_user <- "seamus.owen.stein@dartmouth.edu"
+# local_email_user <- "mscotzens@gmail.com"
 
 # Source authentication configuration (Step 1)
 # Defines DEX_*, APP_REDIRECT_URI, OIDC_SCOPES, endpoints, get_jwks(), `%||%`, dex_client
@@ -208,7 +208,7 @@ body <- dashboardBody(
         content: '';
         animation: dotPulse 1.5s steps(3, start) infinite;
       }
-      
+
      /* Force horizontal layout */
         .radio-card-group .shiny-options-group{
         display:flex               !important;
@@ -225,7 +225,7 @@ body <- dashboardBody(
         min-width:370px           !important;   /* browsers that ignore flex‑basis */
         margin:0                  !important;
       }
-      
+
     /* Hide default spacing */
     .radio-card-group .shiny-options-group .radio label{
       width:100%                !important;
@@ -934,8 +934,8 @@ server <- function(input, output, session) {
       # in plates tab split by nominal sample dilution
       split_by_nominal_dilution <- reactiveVal(FALSE)
       show_wavelength_subtraction  <- reactiveVal(FALSE)
-      
-      
+
+
       plate_data <- reactiveVal()
       sc_feature_select <- reactiveVal()
       header_info <- reactiveVal()
@@ -1013,17 +1013,17 @@ server <- function(input, output, session) {
       layout_processing_lock <- reactiveVal(FALSE)
 
       delete_confirmed <- reactiveVal(FALSE)
-      
-      # study_configuration import 
+
+      # study_configuration import
       config_upload_state <- reactiveVal(list(
         is_uploaded = FALSE,
         upload_time = NULL,
         user = NULL
       ))
-      
+
       config_preview <- reactiveVal(NULL)
       config_preview_antigen <- reactiveVal(NULL)
-   
+
 
       # layout_template_sheets <- reactiveValues(
       #   plate_id = NULL,
@@ -1036,17 +1036,17 @@ server <- function(input, output, session) {
       outlierJobStatus <- reactiveVal(list())
       outlierUIRefresher <- reactiveVal(0)
       concentrationJobStatus <- reactiveVal(list())
-      
+
       concentrationUIRefresher <- reactiveVal(0)
       is_batch_processing      <- reactiveVal(FALSE)
       concentrationUIRefresher <- reactiveVal(0)
-      
+
       # Persists the user's scope choice across concentration_calc_df() invalidations.
       # Without this, renderUI re-creates the radio buttons on every refresh and snaps
       # back to the first choice ("study") while a long calculation is running.
       selected_scope <- reactiveVal("plate")
-      
-      
+
+
       # Tracks which scope+method combinations are currently pending
       # Format: list of named vectors, e.g. list(c(scope="study", method="mcmc_robust"))
       mcmc_pending_scopes <- reactiveVal(list())
@@ -1054,7 +1054,7 @@ server <- function(input, output, session) {
       mcmc_progress_msg    <- reactiveVal(NULL)
       # Path to the temp file used to pass progress from future → main session for MCMC
       mcmc_progress_file   <- reactiveVal(NULL)
-      
+
       # # ── Interpolated async state (mirrors MCMC pattern) ──────────────────────
       #Tracks which scope+method combinations are currently pending for interpolation
       interp_pending_scopes <- reactiveVal(list())
@@ -1076,6 +1076,7 @@ server <- function(input, output, session) {
       source("antigen_family_ui.R", local = TRUE)
       source("split_plates_nominal_sample_dilution.R", local = TRUE)
       source("load_previous_stored_data.R", local=TRUE)
+
       source("plate_validator_functions.R", local = TRUE)
       source("generate_layout_template_ref.R", local = TRUE)
       source("batch_layout_functions.R", local = TRUE)
@@ -1084,6 +1085,7 @@ server <- function(input, output, session) {
       source("elisa_reader.R", local = TRUE)
       source("elisa_diagnostic.R", local = TRUE)
       source("elisa_wavelength_subtraction.R", local = TRUE)
+      source("curve_lookup_functions.R", local = TRUE)
       # source("segment_reader.R", local = TRUE)
 
       source("plate_norm_server.R", local = TRUE)
