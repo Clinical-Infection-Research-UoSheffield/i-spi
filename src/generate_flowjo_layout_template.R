@@ -17,10 +17,6 @@
 #'     isotype feature in bead arrays).
 #' =============================================================================
 
-library(openxlsx)
-library(tidyverse)
-
-
 # ==============================================================
 # HELPER: convert a 384-well label to a 96-well label
 #
@@ -715,36 +711,3 @@ generate_flowjo_layout_template <- function(flowjo_long,
 }
 
 
-# ==============================================================
-# USAGE EXAMPLE (mirrors read_flowjo_values.R workflow)
-# ==============================================================
-#
-# library(readxl); library(tidyverse); library(here)
-# source("flowjo_read_functions.R")
-# source("generate_flowjo_layout_template.R")
-#
-# project_id      <- 64
-# study_name      <- "Hardik_x_study"
-# experiment_name <- "exp_PT_A"
-# filepath        <- here("./gating_output/MFI-values_OPT_3.1_4.1_dilute.xlsx")
-#
-# result      <- load_flowjo_file(filepath)
-# flowjo_df   <- result$flowjo_df
-# dilutions   <- result$dilutions
-#
-# flowjo_df$project_id      <- project_id
-# flowjo_df$study_name      <- study_name
-# flowjo_df$experiment_name <- experiment_name
-#
-# flowjo_long <- pivot_flowjo_long(flowjo_df, dilutions)
-#
-# generate_flowjo_layout_template(
-#   flowjo_long     = flowjo_long,
-#   dilutions       = dilutions,
-#   project_id      = project_id,
-#   study_name      = study_name,
-#   experiment_name = experiment_name,
-#   output_file     = here("./output/Hardik_x_study_exp_PT_A_flowjo_layout_template.xlsx"),
-#   feature         = "MFI",
-#   n_wells         = 96
-# )
