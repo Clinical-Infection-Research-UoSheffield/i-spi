@@ -241,7 +241,7 @@ get_db_connection_from_args <- function(host, port, dbname, user, pass) {
     dbname   = dbname,
     user     = user,
     password = pass,
-    sslmode = 'require',
+    sslmode = 'allow',
     options = "-c search_path=madi_results"
   )
 
