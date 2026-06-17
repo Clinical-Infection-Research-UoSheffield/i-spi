@@ -216,7 +216,7 @@ get_db_connection <- function() {
             port = Sys.getenv("db_port"),
             user = Sys.getenv("db_userid_x"),
             password = Sys.getenv("db_pwd_x"),
-            sslmode = 'require',
+            sslmode = 'allow',
             options = "-c search_path=madi_results"
   )
 }
