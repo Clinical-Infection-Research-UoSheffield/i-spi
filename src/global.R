@@ -150,7 +150,7 @@ message("Workers: ", future::nbrOfWorkers())
 
 # Set options
 options(shiny.maxRequestSize = 100 * 1024^2)
-options(auth0_disable = FALSE)
+options(auth0_disable = TRUE)
 
 # Define custom functions
 rounddf <- function(x, digits = rep(2, ncol(x)), func = round, pad = FALSE) {
